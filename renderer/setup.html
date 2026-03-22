@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Relay</title>
+    <link rel="stylesheet" href="styles/design-system.css">
+    <style>
+        body {
+            background: var(--color-surface);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 40px;
+            user-select: none;
+        }
+
+        .wizard-container {
+            background: var(--color-background);
+            padding: 40px;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            width: 100%;
+            max-width: 650px;
+            border: 1px solid var(--color-border);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .icon-large {
+            font-size: 64px;
+            margin-bottom: 24px;
+            display: block;
+        }
+
+        h1 {
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: var(--color-secondary);
+            margin-bottom: 32px;
+            font-size: var(--font-size-lg);
+            line-height: 1.5;
+        }
+
+        /* Progress Steps */
+        .progress-bar {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 32px;
+        }
+
+        .progress-step {
+            width: 40px;
+            height: 4px;
+            background: var(--color-border);
+            border-radius: 2px;
+            transition: background 0.3s ease;
+        }
+
+        .progress-step.active {
+            background: var(--color-accent);
+        }
+
+        .progress-step.done {
+            background: var(--color-success);
+        }
+
+        /* Steps Container */
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Permission Items */
+        .permission-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            margin-bottom: 16px;
+            text-align: left;
+            border: 1px solid var(--color-border);
+            transition: border-color 0.3s ease;
+        }
+
+        .permission-item.testing {
+            border-color: var(--color-accent);
+        }
+
+        .permission-item.success {
+            border-color: var(--color-success);
+        }
+
+        .permission-item.error {
+            border-color: var(--color-emergency);
+        }
+
+        .permission-info h3 {
+            font-size: var(--font-size-base);
+            margin-bottom: 4px;
+        }
+
+        .permission-info p {
+            font-size: var(--font-size-sm);
+            margin-bottom: 0;
+            color: var(--color-secondary);
+        }
+
+        .status-icon {
+            font-size: 24px;
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .status-icon.success { color: var(--color-success); }
+        .status-icon.error { color: var(--color-emergency); }
+        .status-icon.pending { color: var(--color-secondary); }
+        .status-icon.testing {
+            color: var(--color-accent);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Buttons */
+        .btn-large {
+            width: 100%;
+            padding: 16px;
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+            margin-top: 24px;
+            background: var(--color-accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .btn-large:hover {
+            opacity: 0.9;
+        }
+
+        .btn-large:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            width: 100%;
+            padding: 12px;
+            font-size: var(--font-size-base);
+            font-weight: 500;
+            margin-top: 12px;
+            background: transparent;
+            color: var(--color-accent);
+            border: 1px solid var(--color-accent);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: var(--color-accent);
+            color: white;
+        }
+
+        /* Visualizer */
+        .visualizer-container {
+            height: 60px;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #setup-visualizer {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Instructions Box */
+        .instructions-box {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin: 16px 0;
+            text-align: left;
+        }
+
+        .instructions-box h4 {
+            margin-bottom: 12px;
+            color: var(--color-accent);
+        }
+
+        .instructions-box ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .instructions-box li {
+            margin-bottom: 8px;
+            font-size: var(--font-size-sm);
+            line-height: 1.5;
+        }
+
+        .instructions-box code {
+            background: var(--color-background);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* Error Message */
+        .error-message {
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid var(--color-emergency);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-top: 16px;
+            text-align: left;
+            display: none;
+        }
+
+        .error-message.visible {
+            display: block;
+        }
+
+        .error-message h4 {
+            color: var(--color-emergency);
+            margin-bottom: 8px;
+        }
+
+        .error-message p {
+            font-size: var(--font-size-sm);
+            margin: 0;
+        }
+
+        /* Feature List */
+        .feature-list {
+            text-align: left;
+            margin: 24px 0;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            min-width: 32px;
+        }
+
+        .feature-text h4 {
+            margin-bottom: 4px;
+        }
+
+        .feature-text p {
+            font-size: var(--font-size-sm);
+            color: var(--color-secondary);
+            margin: 0;
+        }
+
+        /* Skip Link */
+        .skip-link {
+            margin-top: 16px;
+            font-size: var(--font-size-sm);
+            color: var(--color-secondary);
+            cursor: pointer;
+        }
+
+        .skip-link:hover {
+            color: var(--color-accent);
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wizard-container">
+        <!-- Progress Bar -->
+        <div class="progress-bar">
+            <div class="progress-step active" data-step="1"></div>
+            <div class="progress-step" data-step="2"></div>
+            <div class="progress-step" data-step="3"></div>
+            <div class="progress-step" data-step="4"></div>
+        </div>
+
+        <!-- Step 1: Welcome -->
+        <div class="step active" id="step-1">
+            <span class="icon-large">👋</span>
+            <h1>Welcome to Relay</h1>
+            <p class="subtitle">Real-time speech-to-text accessibility for the deaf and hard of hearing.</p>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">🎤</span>
+                    <div class="feature-text">
+                        <h4>Live Transcription</h4>
+                        <p>Real-time captions from microphone or system audio using Deepgram Nova-3.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔔</span>
+                    <div class="feature-text">
+                        <h4>Sound Alerts</h4>
+                        <p>Visual alerts for doorbells, alarms, and important sounds.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">💬</span>
+                    <div class="feature-text">
+                        <h4>Smart Context</h4>
+                        <p>Automatic suggestions when joining Zoom, Teams, or FaceTime calls.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-large" id="btn-start">Get Started</button>
+        </div>
+
+        <!-- Step 2: Permissions -->
+        <div class="step" id="step-2">
+            <span class="icon-large">🔐</span>
+            <h1>System Permissions</h1>
+            <p class="subtitle">Relay needs a few permissions to work properly.</p>
+
+            <div class="permission-item" id="perm-mic">
+                <div class="permission-info">
+                    <h3>Microphone Access</h3>
+                    <p>Required to transcribe speech around you.</p>
+                </div>
+                <div class="status-icon pending" id="mic-status">○</div>
+            </div>
+
+            <div class="permission-item" id="perm-screen">
+                <div class="permission-info">
+                    <h3>Screen Recording</h3>
+                    <p>Required to capture audio from Zoom, Teams, etc.</p>
+                </div>
+                <div class="status-icon pending" id="screen-status">○</div>
+            </div>
+
+            <div class="permission-item" id="perm-accessibility">
+                <div class="permission-info">
+                    <h3>Accessibility (Optional)</h3>
+                    <p>Enables smart context detection for meeting apps.</p>
+                </div>
+                <div class="status-icon pending" id="accessibility-status">○</div>
+            </div>
+
+            <div class="visualizer-container">
+                <canvas id="setup-visualizer"></canvas>
+                <div id="vis-text" style="position:absolute; color: var(--color-secondary); font-size: 12px;">
+                    Speak to test microphone
+                </div>
+            </div>
+
+            <div class="error-message" id="permission-error">
+                <h4>Permission Required</h4>
+                <p id="permission-error-text"></p>
+            </div>
+
+            <div class="instructions-box" id="screen-instructions" style="display: none;">
+                <h4>How to Enable Screen Recording</h4>
+                <ol>
+                    <li>Open <strong>System Settings</strong> (or System Preferences)</li>
+                    <li>Go to <strong>Privacy & Security</strong></li>
+                    <li>Click <strong>Screen Recording</strong> in the sidebar</li>
+                    <li>Enable the toggle for <strong>Relay</strong></li>
+                    <li>You may need to restart the app after enabling</li>
+                </ol>
+            </div>
+
+            <button class="btn-large" id="btn-test-permissions">Test Permissions</button>
+            <button class="btn-secondary" id="btn-open-settings" style="display: none;">Open System Settings</button>
+            <p class="skip-link" id="skip-screen">Skip screen recording (microphone only)</p>
+        </div>
+
+        <!-- Step 3: API Connection -->
+        <div class="step" id="step-3">
+            <span class="icon-large">🌐</span>
+            <h1>Connection Test</h1>
+            <p class="subtitle">Let's make sure we can connect to our speech services.</p>
+
+            <div class="permission-item" id="perm-deepgram">
+                <div class="permission-info">
+                    <h3>Deepgram Nova-3</h3>
+                    <p>Real-time speech recognition service.</p>
+                </div>
+                <div class="status-icon pending" id="deepgram-status">○</div>
+            </div>
+
+            <div class="permission-item" id="perm-tts">
+                <div class="permission-info">
+                    <h3>Text-to-Speech</h3>
+                    <p>Voice output for typed messages.</p>
+                </div>
+                <div class="status-icon pending" id="tts-status">○</div>
+            </div>
+
+            <div class="error-message" id="api-error">
+                <h4>Connection Issue</h4>
+                <p id="api-error-text"></p>
+            </div>
+
+            <div class="instructions-box" id="offline-info" style="display: none;">
+                <h4>Offline Mode Available</h4>
+                <ol>
+                    <li>Relay includes an offline speech engine (Whisper)</li>
+                    <li>It works without internet but is slower and less accurate</li>
+                    <li>The app will automatically fall back to offline mode if needed</li>
+                </ol>
+            </div>
+
+            <button class="btn-large" id="btn-test-connection">Test Connection</button>
+            <p class="skip-link" id="skip-connection">Continue with offline mode</p>
+        </div>
+
+        <!-- Step 4: Ready -->
+        <div class="step" id="step-4">
+            <span class="icon-large">🎉</span>
+            <h1>You're All Set!</h1>
+            <p class="subtitle">Relay is ready to help you hear the world.</p>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">📍</span>
+                    <div class="feature-text">
+                        <h4>Caption Bar</h4>
+                        <p>The caption bar appears at the bottom of your screen. It stays on top of other windows.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">⚙️</span>
+                    <div class="feature-text">
+                        <h4>Menu Bar</h4>
+                        <p>Access settings and toggle visibility from the menu bar icon.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🎯</span>
+                    <div class="feature-text">
+                        <h4>Audio Source</h4>
+                        <p>Use the dropdown in the top-right to switch between microphone and system audio.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-large" id="btn-launch">Launch Relay</button>
+            <button class="btn-secondary" id="btn-run-setup-again">Run Setup Again</button>
+        </div>
+    </div>
+
+    <script src="setup.js"></script>
+</body>
+
+</html>

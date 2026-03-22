@@ -1,0 +1,482 @@
+/* ============================================
+   RELAY ANIMATIONS
+   Premium Motion System for Accessibility
+   ============================================ */
+
+/* ============================================
+   ENTRANCE ANIMATIONS
+   ============================================ */
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes scaleInBounce {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    60% {
+        transform: scale(1.05);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ============================================
+   EXIT ANIMATIONS
+   ============================================ */
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes fadeOutDown {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+}
+
+@keyframes scaleOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+}
+
+/* ============================================
+   ATTENTION ANIMATIONS
+   ============================================ */
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+@keyframes glow {
+    0%, 100% {
+        box-shadow: 0 0 5px currentColor;
+    }
+    50% {
+        box-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* ============================================
+   LOADING ANIMATIONS
+   ============================================ */
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes dots {
+    0%, 20% {
+        content: '.';
+    }
+    40% {
+        content: '..';
+    }
+    60%, 100% {
+        content: '...';
+    }
+}
+
+@keyframes wave {
+    0%, 100% {
+        transform: scaleY(1);
+    }
+    50% {
+        transform: scaleY(0.5);
+    }
+}
+
+/* ============================================
+   SOUND VISUALIZATION
+   ============================================ */
+
+@keyframes sound-bar {
+    0%, 100% {
+        height: 20%;
+    }
+    50% {
+        height: 100%;
+    }
+}
+
+@keyframes ripple {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+/* ============================================
+   MODE TRANSITIONS
+   ============================================ */
+
+@keyframes mode-switch {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes blind-mode-activate {
+    0% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(0.3);
+    }
+    100% {
+        filter: brightness(1);
+    }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.animate-fade-in {
+    animation: fadeIn 0.3s var(--ease-apple-out) forwards;
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.4s var(--ease-spring) forwards;
+}
+
+.animate-fade-in-down {
+    animation: fadeInDown 0.4s var(--ease-spring) forwards;
+}
+
+.animate-scale-in {
+    animation: scaleIn 0.3s var(--ease-apple-out) forwards;
+}
+
+.animate-scale-in-bounce {
+    animation: scaleInBounce 0.5s var(--ease-spring-dramatic) forwards;
+}
+
+.animate-fade-out {
+    animation: fadeOut 0.2s var(--ease-apple-in) forwards;
+}
+
+.animate-pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-pulse-fast {
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.animate-bounce {
+    animation: bounce 1s ease-in-out infinite;
+}
+
+.animate-shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+.animate-glow {
+    animation: glow 2s ease-in-out infinite;
+}
+
+/* ============================================
+   DELAY UTILITIES
+   ============================================ */
+
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* ============================================
+   STAGGER ANIMATIONS
+   ============================================ */
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+
+/* ============================================
+   HOVER EFFECTS
+   ============================================ */
+
+.hover-lift {
+    transition: transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-apple-out);
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.hover-scale {
+    transition: transform 0.2s var(--ease-spring);
+}
+
+.hover-scale:hover {
+    transform: scale(1.05);
+}
+
+.hover-glow {
+    transition: box-shadow 0.3s var(--ease-apple-out);
+}
+
+.hover-glow:hover {
+    box-shadow: 0 0 20px rgba(0, 113, 227, 0.4);
+}
+
+/* ============================================
+   ACCESSIBILITY - REDUCED MOTION
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .animate-pulse,
+    .animate-pulse-fast,
+    .animate-bounce,
+    .animate-spin,
+    .animate-glow {
+        animation: none !important;
+    }
+}
+
+/* ============================================
+   BLIND MODE SPECIFIC ANIMATIONS
+   ============================================ */
+
+@keyframes voice-wave {
+    0%, 100% {
+        transform: scaleY(0.3);
+        opacity: 0.5;
+    }
+    50% {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+
+.voice-indicator-bar {
+    animation: voice-wave 0.5s ease-in-out infinite;
+}
+
+.voice-indicator-bar:nth-child(1) { animation-delay: 0ms; }
+.voice-indicator-bar:nth-child(2) { animation-delay: 100ms; }
+.voice-indicator-bar:nth-child(3) { animation-delay: 200ms; }
+.voice-indicator-bar:nth-child(4) { animation-delay: 300ms; }
+.voice-indicator-bar:nth-child(5) { animation-delay: 400ms; }
+
+/* ============================================
+   COMBINED MODE - HAPTIC VISUALIZATION
+   ============================================ */
+
+@keyframes haptic-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 113, 227, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 20px rgba(0, 113, 227, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 113, 227, 0);
+    }
+}
+
+.haptic-visual {
+    animation: haptic-pulse 1s ease-out;
+}
+
+/* ============================================
+   ALERT PRIORITY ANIMATIONS
+   ============================================ */
+
+@keyframes emergency-flash {
+    0%, 100% {
+        background-color: rgba(255, 59, 48, 0.9);
+    }
+    50% {
+        background-color: rgba(255, 59, 48, 1);
+    }
+}
+
+.alert-emergency-urgent {
+    animation: emergency-flash 0.5s ease-in-out infinite;
+}
+
+/* ============================================
+   SMOOTH SCROLLING
+   ============================================ */
+
+.smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================
+   FOCUS TRANSITIONS
+   ============================================ */
+
+.focus-transition {
+    transition: outline-offset 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.focus-transition:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   GLASS MORPHISM SHIMMER
+   ============================================ */
+
+.glass-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}

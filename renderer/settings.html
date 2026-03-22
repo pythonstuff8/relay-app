@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relay Settings</title>
+    <link rel="stylesheet" href="styles/design-system.css">
+    <style>
+        body {
+            background-color: var(--color-surface);
+            color: var(--color-text);
+            font-family: var(--font-stack);
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 220px;
+            padding: 20px 12px;
+            background: var(--color-background);
+            border-right: 1px solid var(--color-border);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-top: 50px;
+        }
+
+        .sidebar-item {
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            color: var(--color-secondary);
+            transition: all 0.2s;
+        }
+
+        .sidebar-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--color-text);
+        }
+
+        .sidebar-item.active {
+            background: var(--color-accent);
+            color: white;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 30px 40px;
+            overflow-y: auto;
+            padding-top: 50px;
+        }
+
+        h1 {
+            font-size: var(--font-size-xl);
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            margin-top: 28px;
+            margin-bottom: 12px;
+            color: var(--color-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 11px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--color-text);
+        }
+
+        .label-hint {
+            font-size: var(--font-size-xs);
+            color: var(--color-secondary);
+            font-weight: 400;
+            margin-top: 2px;
+        }
+
+        .input-control {
+            width: 100%;
+            max-width: 400px;
+            padding: 8px 10px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-border);
+            background: var(--color-background);
+            color: var(--color-text);
+            font-size: var(--font-size-sm);
+        }
+
+        select.input-control {
+            cursor: pointer;
+        }
+
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 400px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .toggle-row label {
+            margin: 0;
+        }
+
+        .range-row {
+            max-width: 400px;
+        }
+
+        .range-row .range-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .range-row .range-value {
+            font-size: var(--font-size-xs);
+            color: var(--color-accent);
+            font-weight: 600;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            max-width: 400px;
+            margin-top: 4px;
+            accent-color: var(--color-accent);
+        }
+
+        /* Toggle switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(120, 120, 128, 0.32);
+            border-radius: 12px;
+            transition: 0.3s;
+        }
+
+        .toggle-slider::before {
+            content: "";
+            position: absolute;
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--color-accent);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* Tag input */
+        .tag-input-wrapper {
+            max-width: 400px;
+        }
+
+        .tags-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+            min-height: 24px;
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: var(--color-accent);
+            color: white;
+            border-radius: 12px;
+            font-size: var(--font-size-xs);
+            font-weight: 500;
+        }
+
+        .tag-remove {
+            cursor: pointer;
+            opacity: 0.7;
+            font-size: 14px;
+        }
+
+        .tag-remove:hover {
+            opacity: 1;
+        }
+
+        /* Category grid */
+        .category-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            max-width: 400px;
+        }
+
+        .category-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--color-border);
+            background: var(--color-background);
+        }
+
+        .category-icon {
+            font-size: 16px;
+        }
+
+        .category-label {
+            font-size: var(--font-size-sm);
+            flex: 1;
+        }
+
+        /* Shortcut display */
+        .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 500px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .shortcut-action {
+            font-size: var(--font-size-sm);
+        }
+
+        .shortcut-keys {
+            display: flex;
+            gap: 4px;
+        }
+
+        .key {
+            padding: 3px 8px;
+            background: var(--color-background);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        /* Caption preview */
+        .caption-preview-box {
+            max-width: 500px;
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+            margin-top: 16px;
+            border: 1px solid var(--color-border);
+        }
+
+        .caption-preview-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--color-secondary);
+            margin-bottom: 8px;
+        }
+
+        /* Reset button */
+        .reset-section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .btn-danger {
+            background: var(--color-emergency);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sidebar">
+        <div class="sidebar-item active" data-tab="general">General</div>
+        <div class="sidebar-item" data-tab="captions">Captions</div>
+        <div class="sidebar-item" data-tab="sound-alerts">Sound Alerts</div>
+        <div class="sidebar-item" data-tab="ai">AI Assistant</div>
+        <div class="sidebar-item" data-tab="meeting">Meeting</div>
+        <div class="sidebar-item" data-tab="privacy">Privacy</div>
+        <div class="sidebar-item" data-tab="shortcuts">Shortcuts</div>
+        <div class="sidebar-item" data-tab="advanced">Advanced</div>
+    </div>
+
+    <div class="main-content">
+        <!-- GENERAL -->
+        <div id="general" class="section active">
+            <h1>General</h1>
+
+            <div class="toggle-row">
+                <label>Launch at Login</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-launch-login">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Show in Menu Bar</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-menu-bar">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top:20px;">
+                <label>Speech Language</label>
+                <select id="setting-language" class="input-control">
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Spanish</option>
+                    <option value="fr-FR">French</option>
+                    <option value="de-DE">German</option>
+                    <option value="it-IT">Italian</option>
+                    <option value="pt-BR">Portuguese (BR)</option>
+                    <option value="ja-JP">Japanese</option>
+                    <option value="ko-KR">Korean</option>
+                    <option value="zh-CN">Chinese (Simplified)</option>
+                </select>
+            </div>
+
+            <h2>Name Detection</h2>
+            <div class="form-group">
+                <label>Your Names / Nicknames</label>
+                <div class="label-hint">Relay will alert you when these names are spoken</div>
+                <div id="names-input" class="tag-input-wrapper" style="margin-top:8px;">
+                    <div class="tags-list"></div>
+                    <input type="text" class="input-control" placeholder="Type a name and press Enter">
+                </div>
+            </div>
+        </div>
+
+        <!-- CAPTIONS -->
+        <div id="captions" class="section">
+            <h1>Captions</h1>
+
+            <div class="toggle-row">
+                <label>Show Captions</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-caption-enabled" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <h2>Typography</h2>
+
+            <div class="form-group">
+                <label>Font Family</label>
+                <select id="setting-caption-font" class="input-control">
+                    <option value="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif">System (SF Pro)</option>
+                    <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica Neue</option>
+                    <option value="Georgia, 'Times New Roman', serif">Georgia (Serif)</option>
+                    <option value="'Courier New', Courier, monospace">Courier (Monospace)</option>
+                    <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                    <option value="'OpenDyslexic', sans-serif">OpenDyslexic</option>
+                </select>
+            </div>
+
+            <div class="form-group range-row">
+                <div class="range-header">
+                    <label>Font Size</label>
+                    <span id="caption-size-value" class="range-value">24</span>
+                </div>
+                <input type="range" id="setting-caption-size" min="14" max="48" value="24">
+            </div>
+
+            <div class="form-group">
+                <label>Font Weight</label>
+                <select id="setting-caption-weight" class="input-control">
+                    <option value="light">Light</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="bold">Bold</option>
+                </select>
+            </div>
+
+            <h2>Layout</h2>
+
+            <div class="form-group">
+                <label>Caption Position</label>
+                <select id="setting-caption-position" class="input-control">
+                    <option value="bottom">Bottom (Default)</option>
+                    <option value="top">Top</option>
+                    <option value="floating">Floating (Draggable)</option>
+                </select>
+            </div>
+
+            <div class="form-group range-row">
+                <div class="range-header">
+                    <label>Max Lines</label>
+                    <span id="caption-lines-value" class="range-value">3</span>
+                </div>
+                <input type="range" id="setting-caption-max-lines" min="1" max="10" value="3">
+            </div>
+
+            <div class="form-group range-row">
+                <div class="range-header">
+                    <label>Background Opacity</label>
+                    <span id="caption-opacity-value" class="range-value">85</span>
+                </div>
+                <input type="range" id="setting-caption-bg-opacity" min="0" max="100" value="85">
+            </div>
+
+            <div class="form-group range-row">
+                <div class="range-header">
+                    <label>Auto-Hide Delay (seconds, 0 = never)</label>
+                    <span id="autohide-value" class="range-value">0</span>
+                </div>
+                <input type="range" id="setting-autohide-delay" min="0" max="30" value="0">
+            </div>
+
+            <h2>Features</h2>
+
+            <div class="toggle-row">
+                <label>Speaker Names & Colors</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-speaker-names">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Emotion Indicators</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-emotions">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Timestamps</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-timestamps">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Confidence Shading</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-confidence">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Show Filler Words</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-filler-words">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="form-group range-row" style="margin-top:12px;">
+                <div class="range-header">
+                    <label>Filler Word Opacity</label>
+                    <span id="filler-opacity-value" class="range-value">50</span>
+                </div>
+                <input type="range" id="setting-filler-opacity" min="10" max="100" value="50">
+            </div>
+
+            <h2>Keyword Highlighting</h2>
+            <div class="form-group">
+                <label>Highlighted Keywords</label>
+                <div class="label-hint">These words will be bolded in captions</div>
+                <div id="keywords-input" class="tag-input-wrapper" style="margin-top:8px;">
+                    <div class="tags-list"></div>
+                    <input type="text" class="input-control" placeholder="Type a keyword and press Enter">
+                </div>
+            </div>
+
+            <h2>Preview</h2>
+            <div class="caption-preview-box" id="caption-preview"
+                style="background:rgba(29,29,31,0.85);color:#f5f5f7;font-size:24px;">
+                <div class="caption-preview-label">Live Preview</div>
+                <div>
+                    <span class="preview-speaker" style="color:#0071e3;font-size:0.7em;font-weight:600;">Speaker 1: </span>
+                    Hello, <span class="preview-filler" style="opacity:0.5;">um,</span> welcome to
+                    the meeting. Let's get started with the agenda.
+                </div>
+            </div>
+        </div>
+
+        <!-- SOUND ALERTS -->
+        <div id="sound-alerts" class="section">
+            <h1>Sound Alerts</h1>
+
+            <div class="toggle-row">
+                <label>Enable Sound Alerts</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-sound-alerts">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <h2>Alert Categories</h2>
+            <div class="category-grid">
+                <div class="category-item">
+                    <span class="category-icon">🚨</span>
+                    <span class="category-label">Emergency</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-emergency">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🔔</span>
+                    <span class="category-label">Attention</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-attention">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">💬</span>
+                    <span class="category-label">Communication</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-communication">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🏠</span>
+                    <span class="category-label">Appliance</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-appliance">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🌳</span>
+                    <span class="category-label">Environmental</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-environmental">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🎵</span>
+                    <span class="category-label">Media</span>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="alert-media">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI ASSISTANT -->
+        <div id="ai" class="section">
+            <h1>AI Assistant</h1>
+
+            <div class="form-group">
+                <label>Proactivity Level</label>
+                <div class="label-hint">How often the AI offers unsolicited suggestions</div>
+                <select id="setting-ai-proactivity" class="input-control" style="margin-top:6px;">
+                    <option value="minimal">Minimal - Only when asked</option>
+                    <option value="balanced">Balanced - Smart suggestions</option>
+                    <option value="proactive">Proactive - Frequent assistance</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Explanation Detail</label>
+                <div class="label-hint">Level of detail in screen explanations</div>
+                <select id="setting-ai-detail" class="input-control" style="margin-top:6px;">
+                    <option value="brief">Brief - Key info only</option>
+                    <option value="normal">Normal - Balanced detail</option>
+                    <option value="detailed">Detailed - Full description</option>
+                </select>
+            </div>
+
+            <div class="toggle-row">
+                <label>Enable AI Guide Mode</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-guide-mode">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MEETING -->
+        <div id="meeting" class="section">
+            <h1>Meeting Mode</h1>
+
+            <div class="toggle-row">
+                <label>Auto-Detect Meetings</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-meeting-detect">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Auto-Generate Summary</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-meeting-summary">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="label-hint" style="margin-top:12px;max-width:400px;">
+                Meeting mode activates automatically when Zoom, Teams, Google Meet, FaceTime, Webex, Slack, Discord, or Skype are detected.
+            </div>
+        </div>
+
+        <!-- PRIVACY -->
+        <div id="privacy" class="section">
+            <h1>Privacy</h1>
+
+            <div class="toggle-row">
+                <label>Force Offline Transcription</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-offline-mode">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+            <div class="label-hint" style="max-width:400px;">
+                Uses local Whisper model instead of Deepgram cloud. Lower accuracy but fully private.
+            </div>
+
+            <div class="toggle-row" style="margin-top:16px;">
+                <label>Store Transcripts Locally</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-store-transcripts">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="form-group range-row" style="margin-top:12px;">
+                <div class="range-header">
+                    <label>Transcript Retention (hours)</label>
+                    <span id="retention-value" class="range-value">24</span>
+                </div>
+                <input type="range" id="setting-retention" min="1" max="168" value="24">
+            </div>
+            <div class="label-hint" style="max-width:400px;">
+                Transcripts older than this will be automatically deleted.
+            </div>
+        </div>
+
+        <!-- SHORTCUTS -->
+        <div id="shortcuts" class="section">
+            <h1>Keyboard Shortcuts</h1>
+
+            <div class="shortcut-row">
+                <span class="shortcut-action">Toggle Captions</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">C</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Explain Screen</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">E</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Command Bar</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">Space</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">AI Guide</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">H</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Dismiss Alerts</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">D</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Toggle Overlay</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">V</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Quick Mute (Meeting)</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">M</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Caption Size +</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">=</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Caption Size -</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">-</span></div>
+            </div>
+            <div class="shortcut-row">
+                <span class="shortcut-action">Open Settings</span>
+                <div class="shortcut-keys"><span class="key">Cmd</span><span class="key">Shift</span><span class="key">,</span></div>
+            </div>
+        </div>
+
+        <!-- ADVANCED -->
+        <div id="advanced" class="section">
+            <h1>Advanced</h1>
+
+            <div class="toggle-row">
+                <label>Debug Logging</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-debug">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label>Performance Mode</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="setting-performance">
+                    <span class="toggle-slider"></span>
+                </div>
+            </div>
+            <div class="label-hint" style="max-width:400px;">
+                Reduces visual effects and AI polling frequency to save battery.
+            </div>
+
+            <div class="reset-section">
+                <button id="reset-settings-btn" class="btn-danger">Reset All Settings</button>
+                <div class="label-hint" style="margin-top:8px;">This will restore all settings to their default values.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="settings-ui.js"></script>
+</body>
+
+</html>

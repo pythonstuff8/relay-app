@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relay Overlay</title>
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/apple-components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+
+    <style>
+        /* ============================================
+           ROOT VARIABLES - Premium Glassmorphism
+           ============================================ */
+        :root {
+            /* Glassmorphism Surfaces */
+            --glass-bg-primary: hsla(0, 0%, 100%, 0.15);
+            --glass-bg-secondary: hsla(0, 0%, 100%, 0.08);
+            --glass-bg-tertiary: hsla(0, 0%, 100%, 0.04);
+            --glass-bg-dark: hsla(240, 6%, 12%, 0.75);
+            --glass-bg-darker: hsla(240, 6%, 8%, 0.85);
+
+            /* Dynamic Borders */
+            --border-glass: hsla(0, 0%, 100%, 0.18);
+            --border-glass-subtle: hsla(0, 0%, 100%, 0.08);
+            --border-glow: hsla(0, 0%, 100%, 0.25);
+
+            /* Premium Shadows */
+            --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.12);
+            --shadow-glass-lg: 0 20px 60px rgba(0, 0, 0, 0.25);
+            --shadow-glass-xl: 0 32px 80px rgba(0, 0, 0, 0.35);
+            --shadow-inner: inset 0 1px 0 hsla(0, 0%, 100%, 0.1);
+            --shadow-highlight: 0 0 0 1px hsla(0, 0%, 100%, 0.05);
+
+            /* Spring Physics */
+            --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+            --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --spring-snappy: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+            /* Typography Scale - Dynamic Type */
+            --text-caption: 17px;
+            --text-caption-lg: 20px;
+            --text-badge: 11px;
+            --text-label: 13px;
+            --text-alert: 15px;
+
+            /* Spacing */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+
+            /* Radii */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-2xl: 24px;
+            --radius-full: 9999px;
+
+            /* Alert Colors */
+            --alert-emergency: hsl(3, 100%, 59%);
+            --alert-attention: hsl(35, 100%, 52%);
+            --alert-communication: hsl(211, 100%, 50%);
+            --alert-environmental: hsl(135, 59%, 49%);
+            --alert-appliance: hsl(199, 98%, 62%);
+            --alert-media: hsl(280, 65%, 53%);
+            --alert-info: hsl(210, 11%, 55%);
+        }
+
+        /* ============================================
+           BASE STYLES
+           ============================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: transparent;
+            color: var(--color-text);
+        }
+
+        /* ============================================
+           LAYER SYSTEM
+           ============================================ */
+        #layer-1-alerts {
+            position: fixed;
+            top: calc(var(--space-4) + 60px);
+            right: var(--space-4);
+            z-index: 200;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+            max-width: 400px;
+        }
+
+        #layer-2-captions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 300;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding: 0 var(--space-5) 0;
+        }
+
+        #accessibility-shell {
+            width: min(1280px, calc(100vw - 40px));
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: var(--space-4);
+            pointer-events: none;
+        }
+
+        body[data-accessibility-mode="deaf"] #accessibility-shell {
+            align-items: flex-end;
+        }
+
+        #layer-3-guidance {
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            pointer-events: none;
+        }
+
+        #layer-3-guidance > * {
+            pointer-events: auto;
+        }
+
+        #layer-4-emergency {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* ============================================
+           GLASSMORPHISM PANELS
+           ============================================ */
+        .glass-panel {
+            background: linear-gradient(135deg, var(--glass-bg-primary) 0%, var(--glass-bg-secondary) 100%);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid var(--border-glass);
+            box-shadow:
+                var(--shadow-glass),
+                var(--shadow-inner),
+                0 0 0 0.5px rgba(0, 0, 0, 0.05);
+            border-radius: var(--radius-xl);
+            transition: transform 0.3s var(--spring-smooth), box-shadow 0.3s var(--spring-smooth);
+        }
+
+        .glass-panel:hover {
+            box-shadow:
+                var(--shadow-glass-lg),
+                var(--shadow-inner),
+                0 0 0 0.5px rgba(0, 0, 0, 0.08);
+        }
+
+        .glass-panel-dark {
+            background: linear-gradient(135deg, var(--glass-bg-dark) 0%, var(--glass-bg-darker) 100%);
+            border: 1px solid var(--border-glass-subtle);
+        }
+
+        /* ============================================
+           MODE INDICATOR - Compact button for toolbar
+           ============================================ */
+        .mode-indicator {
+            pointer-events: auto;
+            padding: 4px 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.95);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            transition: all 0.2s var(--spring-smooth);
+            white-space: nowrap;
+            flex-shrink: 0;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+        }
+
+        .mode-indicator:hover {
+            transform: scale(1.05);
+            opacity: 0.9;
+        }
+
+        .mode-indicator:active {
+            transform: scale(0.95);
+        }
+
+        .mode-indicator.deaf {
+            background: linear-gradient(135deg, rgba(0, 113, 227, 0.95) 0%, rgba(0, 89, 178, 0.95) 100%);
+            box-shadow: 0 2px 8px rgba(0, 113, 227, 0.4);
+        }
+
+        .mode-indicator.blind {
+            background: linear-gradient(135deg, rgba(175, 82, 222, 0.95) 0%, rgba(147, 55, 193, 0.95) 100%);
+            box-shadow: 0 2px 8px rgba(175, 82, 222, 0.4);
+        }
+
+        .mode-indicator::before {
+            content: "";
+            width: 5px;
+            height: 5px;
+            border-radius: var(--radius-full);
+            background: currentColor;
+            animation: modePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes modePulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.85); }
+        }
+
+        /* Toolbar divider */
+        .toolbar-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--border-glass-subtle);
+            margin: 0 4px;
+        }
+
+        /* ============================================
+           CAPTION BAR - Premium Design
+           ============================================ */
+        #caption-bar {
+            width: min(900px, calc(100vw - 120px));
+            min-width: 0;
+            max-width: 900px;
+            flex: 1 1 auto;
+            height: auto;
+            max-height: 140px; /* Compact - 2 lines max */
+            padding: var(--space-4);
+            display: flex;
+            flex-direction: column;
+            pointer-events: auto;
+            position: relative;
+            opacity: 0;
+            transform: translateY(30px) scale(0.98);
+            animation: captionBarIn 0.6s var(--spring-smooth) forwards;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        body[data-accessibility-mode="deaf"] #caption-bar {
+            width: min(900px, calc(100vw - 420px));
+            height: 230px;
+            max-height: calc(100vh - 18px);
+        }
+
+        @keyframes captionBarIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Caption Toolbar - Fixed at top, never moves */
+        .caption-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            flex-grow: 0;
+            padding-bottom: var(--space-3);
+            border-bottom: 1px solid var(--border-glass-subtle);
+            margin-bottom: var(--space-3);
+            min-height: 40px;
+            height: 40px;
+            cursor: grab;
+            user-select: none;
+            -webkit-app-region: no-drag;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+            flex-shrink: 0;
+            margin-left: var(--space-2);
+            padding-right: var(--space-1);
+        }
+
+        /* Status Indicator - Refined */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: var(--text-badge);
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: var(--color-secondary);
+            transition: color 0.3s var(--spring-smooth);
+        }
+
+        .status-indicator.active {
+            color: var(--color-success);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: var(--radius-full);
+            background: var(--color-secondary);
+            transition: all 0.3s var(--spring-bounce);
+            position: relative;
+        }
+
+        .status-dot::after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: var(--radius-full);
+            background: inherit;
+            opacity: 0;
+            filter: blur(8px);
+            transition: opacity 0.3s;
+        }
+
+        .status-dot.active {
+            background: var(--color-success);
+            box-shadow: 0 0 12px var(--color-success);
+        }
+
+        .status-dot.active::after {
+            opacity: 0.5;
+        }
+
+        .status-dot.listening {
+            animation: statusPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        /* Caption Content - Fixed toolbar, 2 lines max */
+        .caption-content {
+            flex: 1;
+            min-height: 0;
+            max-height: 3em;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+            overflow: hidden;
+        }
+
+        body[data-accessibility-mode="deaf"] .caption-content {
+            max-height: none;
+        }
+
+        /* Conversation Text - 2 lines max then cut off */
+        .conversation-text {
+            font-size: var(--text-caption);
+            font-weight: 400;
+            line-height: 1.45;
+            letter-spacing: -0.01em;
+            text-align: left;
+            overflow-y: auto;
+            overflow-x: hidden;
+            height: auto;
+            max-height: none;
+            padding-right: var(--space-2);
+            display: block;
+            text-overflow: ellipsis;
+        }
+
+        .conversation-text::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .conversation-text::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .conversation-text::-webkit-scrollbar-thumb {
+            background: var(--border-glass-subtle);
+            border-radius: var(--radius-full);
+        }
+
+        /* Caption Segments */
+        .caption-segment {
+            margin-bottom: var(--space-2);
+            opacity: 0;
+            animation: segmentIn 0.4s var(--spring-smooth) forwards;
+            display: flex;
+            align-items: baseline;
+            gap: var(--space-2);
+        }
+
+        @keyframes segmentIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Speaker Label - Refined */
+        .caption-speaker-label {
+            font-size: 0.65em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex-shrink: 0;
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+            background: var(--glass-bg-tertiary);
+        }
+
+        /* Word-level Animation */
+        .caption-word {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(4px);
+            animation: wordIn 0.25s var(--spring-bounce) forwards;
+        }
+
+        @keyframes wordIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Word States */
+        .caption-word-interim {
+            color: var(--color-secondary);
+            font-style: italic;
+        }
+
+        .caption-word-filler {
+            opacity: 0.4;
+        }
+
+        .caption-word-low-confidence {
+            opacity: 0.6;
+            text-decoration: wavy underline;
+            text-decoration-color: var(--color-warning);
+            text-underline-offset: 3px;
+        }
+
+        .caption-word-keyword {
+            font-weight: 600;
+            background: linear-gradient(180deg, transparent 60%, rgba(255, 159, 10, 0.25) 60%);
+        }
+
+        /* Meeting Badge - Premium Design */
+        #meeting-badge {
+            display: none;
+            align-items: center;
+            gap: var(--space-2);
+            background: linear-gradient(135deg, rgba(255, 59, 48, 0.9) 0%, rgba(255, 59, 48, 0.7) 100%);
+            padding: 4px 10px;
+            border-radius: var(--radius-full);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: white;
+            box-shadow: 0 2px 12px rgba(255, 59, 48, 0.4);
+        }
+
+        #meeting-badge.active {
+            display: flex;
+            animation: badgeIn 0.5s var(--spring-bounce) forwards;
+        }
+
+        @keyframes badgeIn {
+            from { opacity: 0; transform: scale(0.8) translateX(-10px); }
+            to { opacity: 1; transform: scale(1) translateX(0); }
+        }
+
+        .meeting-badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: var(--radius-full);
+            background: white;
+            animation: recordingPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes recordingPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.8); }
+        }
+
+        /* Meeting Timer */
+        .meeting-timer {
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+            margin-left: var(--space-1);
+        }
+
+        /* ============================================
+           ALERT CARDS - Premium Design
+           ============================================ */
+        .alert-card {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-4);
+            border-radius: var(--radius-lg);
+            pointer-events: auto;
+            max-width: 380px;
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.15),
+                0 2px 8px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 hsla(0, 0%, 100%, 0.1);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid hsla(0, 0%, 100%, 0.12);
+            opacity: 0;
+            transform: translateX(60px) scale(0.95);
+            animation: alertIn 0.5s var(--spring-bounce) forwards;
+        }
+
+        @keyframes alertIn {
+            from {
+                opacity: 0;
+                transform: translateX(60px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+        }
+
+        .alert-card.dismissing {
+            animation: alertOut 0.35s var(--spring-snappy) forwards;
+        }
+
+        @keyframes alertOut {
+            from {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(60px) scale(0.95);
+            }
+        }
+
+        /* Alert Icon Container */
+        .alert-icon-wrapper {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: hsla(0, 0%, 100%, 0.15);
+            box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.1);
+        }
+
+        .alert-icon {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Alert Content */
+        .alert-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .alert-label {
+            font-size: var(--text-alert);
+            font-weight: 600;
+            line-height: 1.3;
+            margin-bottom: 2px;
+        }
+
+        .alert-detail {
+            font-size: var(--text-label);
+            opacity: 0.75;
+            line-height: 1.4;
+        }
+
+        .alert-dismiss {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.2s var(--spring-smooth);
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
+        .alert-dismiss:hover {
+            opacity: 1;
+            background: hsla(0, 0%, 100%, 0.1);
+        }
+
+        .alert-dismiss svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Alert Categories with Premium Colors */
+        .alert-emergency {
+            background: linear-gradient(135deg, hsla(3, 100%, 59%, 0.95) 0%, hsla(3, 100%, 52%, 0.95) 100%);
+            color: white;
+            animation: alertIn 0.5s var(--spring-bounce) forwards, alertEmergencyPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes alertEmergencyPulse {
+            0%, 100% { box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3), 0 0 0 0 rgba(255, 59, 48, 0.4); }
+            50% { box-shadow: 0 8px 32px rgba(255, 59, 48, 0.5), 0 0 0 4px rgba(255, 59, 48, 0); }
+        }
+
+        .alert-attention {
+            background: linear-gradient(135deg, hsla(35, 100%, 52%, 0.95) 0%, hsla(35, 100%, 46%, 0.95) 100%);
+            color: white;
+        }
+
+        .alert-communication {
+            background: linear-gradient(135deg, hsla(211, 100%, 50%, 0.95) 0%, hsla(211, 100%, 44%, 0.95) 100%);
+            color: white;
+        }
+
+        .alert-environmental {
+            background: linear-gradient(135deg, hsla(135, 59%, 49%, 0.95) 0%, hsla(135, 59%, 43%, 0.95) 100%);
+            color: white;
+        }
+
+        .alert-appliance {
+            background: linear-gradient(135deg, hsla(199, 98%, 62%, 0.95) 0%, hsla(199, 98%, 54%, 0.95) 100%);
+            color: hsl(240, 6%, 15%);
+        }
+
+        .alert-appliance .alert-icon-wrapper {
+            background: hsla(240, 6%, 15%, 0.1);
+        }
+
+        .alert-media {
+            background: linear-gradient(135deg, hsla(280, 65%, 53%, 0.95) 0%, hsla(280, 65%, 47%, 0.95) 100%);
+            color: white;
+        }
+
+        .alert-info {
+            background: linear-gradient(135deg, hsla(210, 11%, 25%, 0.95) 0%, hsla(210, 11%, 20%, 0.95) 100%);
+            color: white;
+        }
+
+        /* Alert Stack Effect */
+        .alert-card:nth-child(1) { z-index: 5; }
+        .alert-card:nth-child(2) { z-index: 4; transform: scale(0.98) translateY(-8px); opacity: 0.85; }
+        .alert-card:nth-child(3) { z-index: 3; transform: scale(0.96) translateY(-16px); opacity: 0.7; }
+        .alert-card:nth-child(n+4) { display: none; }
+
+        /* ============================================
+           TOOL BUTTONS - Premium Design
+           ============================================ */
+        .tool-btn {
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            min-height: 34px;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--color-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.25s var(--spring-smooth);
+            border: none;
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .tool-btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius-md);
+            background: hsla(0, 0%, 100%, 0);
+            transition: background 0.25s var(--spring-smooth);
+        }
+
+        .tool-btn:hover::before {
+            background: hsla(0, 0%, 100%, 0.1);
+        }
+
+        .tool-btn:active {
+            transform: scale(0.92);
+        }
+
+        .tool-btn svg {
+            width: 18px;
+            height: 18px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tool-btn.active {
+            background: hsla(0, 113, 227, 0.2);
+            color: #0071e3;
+        }
+
+        /* ============================================
+           DRAG HANDLE - Refined
+           ============================================ */
+        .drag-handle {
+            width: 40px;
+            height: 4px;
+            background: hsla(0, 0%, 100%, 0.2);
+            border-radius: var(--radius-full);
+            margin: var(--space-3) auto 0;
+            cursor: grab;
+            -webkit-app-region: no-drag;
+            transition: all 0.3s var(--spring-smooth);
+        }
+
+        .drag-handle:hover {
+            width: 60px;
+            background: hsla(0, 0%, 100%, 0.35);
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+            width: 50px;
+        }
+
+        #caption-bar[data-dragging="true"] {
+            transition: none;
+        }
+
+        #caption-bar[data-dragging="true"] .caption-toolbar,
+        #caption-bar[data-dragging="true"] .drag-handle {
+            cursor: grabbing;
+        }
+
+        /* ============================================
+           TTS CONTAINER
+           ============================================ */
+        #tts-container {
+            display: none;
+            flex-direction: row;
+            align-items: center;
+            gap: var(--space-2);
+            width: 100%;
+            margin-top: var(--space-2);
+            padding-top: var(--space-3);
+            border-top: 1px solid var(--border-glass-subtle);
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+        }
+
+        #tts-container.active {
+            display: flex;
+            animation: ttsIn 0.35s var(--spring-smooth) forwards;
+        }
+
+        @keyframes ttsIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #tts-input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-glass-subtle);
+            font-size: var(--text-label);
+            outline: none;
+            background: var(--glass-bg-tertiary);
+            color: var(--color-text);
+            transition: all 0.25s var(--spring-smooth);
+            font-family: inherit;
+        }
+
+        #tts-input:focus {
+            border-color: var(--color-accent);
+            background: var(--glass-bg-secondary);
+            box-shadow: 0 0 0 3px hsla(211, 100%, 50%, 0.15);
+        }
+
+        #tts-output-select {
+            padding: 10px 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-glass-subtle);
+            background: var(--glass-bg-tertiary);
+            color: var(--color-text);
+            font-size: var(--text-label);
+            cursor: pointer;
+            outline: none;
+            font-family: inherit;
+        }
+
+        /* ============================================
+           GESTURE PANEL (DEAF MODE)
+           ============================================ */
+        #gesture-panel {
+            position: relative;
+            z-index: 330;
+            width: min(340px, calc(100vw - 20px));
+            min-width: 280px;
+            height: 360px;
+            max-height: calc(100vh - 18px);
+            flex: 0 0 min(340px, calc(100vw - 20px));
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border-glass-subtle);
+            background: linear-gradient(160deg, hsla(216, 37%, 11%, 0.94), hsla(223, 34%, 16%, 0.96));
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+            display: none;
+            flex-direction: column;
+            pointer-events: auto;
+            overflow: hidden;
+            opacity: 1;
+            transform: none;
+            transition: box-shadow 0.24s var(--spring-smooth), border-color 0.24s var(--spring-smooth);
+        }
+
+        body[data-accessibility-mode="deaf"] #gesture-panel {
+            display: flex;
+        }
+
+        #gesture-panel[data-panel-state="docked"] {
+            position: relative;
+            left: auto;
+            right: auto;
+            top: auto;
+            bottom: auto;
+        }
+
+        #gesture-panel[data-panel-state="floating"] {
+            position: fixed;
+            left: 16px;
+            top: 16px;
+            z-index: 460;
+            flex: 0 0 auto;
+            width: min(340px, calc(100vw - 16px));
+        }
+
+        #gesture-panel[data-active="false"] {
+            border-color: rgba(255, 255, 255, 0.18);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+        }
+
+        body[data-accessibility-mode="blind"] #gesture-panel {
+            display: none !important;
+        }
+
+        .gesture-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: rgba(245, 245, 247, 0.92);
+            cursor: grab;
+            user-select: none;
+        }
+
+        #gesture-panel[data-dragging="true"] .gesture-panel-header {
+            cursor: grabbing;
+        }
+
+        .gesture-panel-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gesture-panel-toggle {
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(245, 245, 247, 0.92);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 3px 8px;
+            cursor: pointer;
+            -webkit-app-region: no-drag;
+        }
+
+        .gesture-panel-toggle:hover {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .gesture-panel-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #33d17a;
+            box-shadow: 0 0 10px rgba(51, 209, 122, 0.55);
+        }
+
+        .gesture-video-wrap {
+            position: relative;
+            width: 100%;
+            flex: 1 1 auto;
+            min-height: 220px;
+            background: #04060d;
+        }
+
+        #gesture-input-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #gesture-overlay-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+
+        #gesture-results {
+            max-height: 78px;
+            overflow: auto;
+            padding: 8px 12px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .gesture-result-item {
+            font-size: 12px;
+            line-height: 1.3;
+            color: rgba(245, 245, 247, 0.88);
+        }
+
+        .gesture-route-badge {
+            margin-left: 6px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: rgba(0, 113, 227, 0.2);
+            color: #9ac8ff;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        #gesture-status {
+            min-height: 32px;
+            padding: 8px 12px 12px;
+            font-size: 12px;
+            color: rgba(245, 245, 247, 0.8);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        @media (max-width: 1140px) {
+            #accessibility-shell {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            #caption-bar {
+                width: min(900px, calc(100vw - 40px));
+            }
+
+            #gesture-panel {
+                width: min(760px, calc(100vw - 20px));
+                flex-basis: min(760px, calc(100vw - 20px));
+                min-width: 0;
+                height: 280px;
+            }
+
+            #gesture-panel[data-panel-state="floating"] {
+                width: min(760px, calc(100vw - 16px));
+            }
+        }
+
+        /* ============================================
+           AUDIO VISUALIZER
+           ============================================ */
+        #visualizer {
+            width: 48px;
+            height: 24px;
+            margin-right: var(--space-2);
+            flex-shrink: 0;
+        }
+
+        /* Ensure toolbar buttons are visible */
+        .toolbar-right .tool-btn {
+            flex-shrink: 0;
+        }
+
+        .toolbar-right .tool-btn:last-child {
+            margin-right: 0;
+        }
+
+        /* ============================================
+           CONFUSION HELP
+           ============================================ */
+        #confusion-help {
+            position: fixed;
+            bottom: 240px;
+            left: var(--space-5);
+            padding: var(--space-3) var(--space-4);
+            display: none;
+            align-items: center;
+            gap: var(--space-3);
+            color: #f5f5f7;
+            font-size: var(--text-label);
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 300;
+            max-width: 300px;
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            background: linear-gradient(135deg, hsla(211, 100%, 50%, 0.9) 0%, hsla(211, 100%, 44%, 0.9) 100%);
+            border: 1px solid hsla(0, 0%, 100%, 0.15);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 8px 24px rgba(0, 113, 227, 0.3);
+            transition: all 0.3s var(--spring-smooth);
+        }
+
+        #confusion-help:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 12px 32px rgba(0, 113, 227, 0.4);
+        }
+
+        #confusion-help svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        /* ============================================
+           MODALS - Premium Design
+           ============================================ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: hsla(240, 6%, 8%, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s var(--spring-smooth);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, var(--glass-bg-dark) 0%, var(--glass-bg-darker) 100%);
+            backdrop-filter: blur(60px) saturate(180%);
+            -webkit-backdrop-filter: blur(60px) saturate(180%);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-2xl);
+            box-shadow: var(--shadow-glass-xl);
+            padding: var(--space-6);
+            max-width: 520px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #f5f5f7;
+            transform: scale(0.9) translateY(20px);
+            opacity: 0;
+            transition: all 0.4s var(--spring-bounce);
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-4);
+            padding-bottom: var(--space-3);
+            border-bottom: 1px solid var(--border-glass-subtle);
+        }
+
+        .modal-title {
+            font-size: var(--text-caption-lg);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-full);
+            background: hsla(0, 0%, 100%, 0.05);
+            border: none;
+            color: #f5f5f7;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s var(--spring-smooth);
+        }
+
+        .modal-close:hover {
+            background: hsla(0, 0%, 100%, 0.1);
+        }
+
+        .modal-close svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .modal-body {
+            line-height: 1.6;
+            font-size: var(--text-label);
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: var(--space-3);
+            justify-content: flex-end;
+            margin-top: var(--space-5);
+            padding-top: var(--space-4);
+            border-top: 1px solid var(--border-glass-subtle);
+        }
+
+        /* Primary Button */
+        .btn-primary {
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            background: #0071e3;
+            color: white;
+            border: none;
+            font-size: var(--text-label);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s var(--spring-smooth);
+            font-family: inherit;
+        }
+
+        .btn-primary:hover {
+            background: #0077ed;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 113, 227, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Secondary Button */
+        .btn-secondary {
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            background: hsla(0, 0%, 100%, 0.1);
+            color: #f5f5f7;
+            border: 1px solid var(--border-glass-subtle);
+            font-size: var(--text-label);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s var(--spring-smooth);
+            font-family: inherit;
+        }
+
+        .btn-secondary:hover {
+            background: hsla(0, 0%, 100%, 0.15);
+        }
+
+        /* ============================================
+           LEGACY ALERT OVERLAY (flash effect)
+           ============================================ */
+        #alert-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s var(--spring-smooth);
+        }
+
+        #alert-overlay.active {
+            opacity: 1;
+        }
+
+        #alert-overlay.danger {
+            background: radial-gradient(circle at center, hsla(3, 100%, 59%, 0.3) 0%, transparent 70%);
+            animation: dangerFlash 0.5s ease;
+        }
+
+        #alert-overlay.warning {
+            background: radial-gradient(circle at center, hsla(35, 100%, 52%, 0.25) 0%, transparent 70%);
+        }
+
+        @keyframes dangerFlash {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        /* ============================================
+           SPEAKER COLORS (Enhanced)
+           ============================================ */
+        .speaker-0 { color: #0071e3; }
+        .speaker-1 { color: #34c759; }
+        .speaker-2 { color: #ff9f0a; }
+        .speaker-3 { color: #ff375f; }
+        .speaker-4 { color: #af52de; }
+        .speaker-5 { color: #5ac8fa; }
+        .speaker-6 { color: #ff6482; }
+        .speaker-7 { color: #ffd60a; }
+
+        .speaker-dot-0 { background: #0071e3; }
+        .speaker-dot-1 { background: #34c759; }
+        .speaker-dot-2 { background: #ff9f0a; }
+        .speaker-dot-3 { background: #ff375f; }
+        .speaker-dot-4 { background: #af52de; }
+        .speaker-dot-5 { background: #5ac8fa; }
+        .speaker-dot-6 { background: #ff6482; }
+        .speaker-dot-7 { background: #ffd60a; }
+
+        /* ============================================
+           ACCESSIBILITY - Focus Management
+           ============================================ */
+        *:focus-visible {
+            outline: 2px solid #0071e3;
+            outline-offset: 2px;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="alert-overlay" role="alert" aria-live="polite"></div>
+
+    <!-- Layer 1: Sound Alerts -->
+    <div id="layer-1-alerts" role="alert" aria-live="polite" aria-label="Sound Alerts"></div>
+
+    <!-- Layer 2: Captions -->
+    <div id="layer-2-captions">
+        <div id="accessibility-shell">
+            <div id="caption-bar" class="glass-panel" role="region" aria-label="Live Captions" data-dragging="false">
+                <!-- Toolbar -->
+                <div class="caption-toolbar">
+                    <div class="toolbar-left">
+                        <!-- Mode Indicator - Now a proper button like others -->
+                        <button id="mode-indicator" class="mode-indicator deaf" style="display: none;" aria-label="Accessibility Mode: Deaf" title="Click to change mode">
+                            <span class="mode-icon" aria-hidden="true">◉</span>
+                            <span class="mode-text">Deaf</span>
+                        </button>
+                        <div class="toolbar-divider"></div>
+                        <div class="status-indicator" id="status-container">
+                            <div class="status-dot active listening" id="status-dot" aria-hidden="true"></div>
+                            <span id="status-text">Listening...</span>
+                        </div>
+                        <div id="meeting-badge" role="status" aria-label="Meeting Recording">
+                            <span class="meeting-badge-dot" aria-hidden="true"></span>
+                            <span>REC</span>
+                            <span class="meeting-timer" id="meeting-timer">00:00</span>
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <canvas id="visualizer" aria-hidden="true" role="img" aria-label="Audio Visualizer"></canvas>
+                        <button class="tool-btn" id="gesture-widget-toggle" title="Close Sign Widget" aria-label="Close Sign Widget">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10 11.5V7a2 2 0 1 1 4 0v4.5"/>
+                                <path d="M8 11.5h8"/>
+                                <path d="M6 14c1.5 2 3.3 3 6 3s4.5-1 6-3"/>
+                                <path d="M4 20l16-16"/>
+                            </svg>
+                        </button>
+                        <button class="tool-btn" id="transcript-btn" title="Transcript History (⌘T)" aria-label="Open Transcript History">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                        </button>
+                        <button class="tool-btn" id="nav-toggle" title="AI Guide (⌘⇧H)" aria-label="Open AI Guide">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                <circle cx="12" cy="17" r="1.15" fill="currentColor" stroke="none"/>
+                            </svg>
+                        </button>
+                        <button class="tool-btn" id="tts-toggle" title="Type to Speak (⌘⇧T)" aria-label="Toggle Type to Speak">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="4 7 4 4 20 4 20 7"/>
+                                <line x1="9" y1="20" x2="15" y2="20"/>
+                                <line x1="12" y1="4" x2="12" y2="20"/>
+                            </svg>
+                        </button>
+                        <button class="tool-btn" id="minimize-btn" title="Minimize" aria-label="Minimize Window">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                        <button class="tool-btn" id="close-btn" title="Close" aria-label="Close Window">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="caption-content">
+                    <div id="transcript" class="conversation-text" role="log" aria-live="polite" aria-atomic="false">
+                        <span class="sr-only">Waiting for speech...</span>
+                    </div>
+
+                    <div id="tts-container" role="form" aria-label="Text to Speech">
+                        <input type="text" id="tts-input" placeholder="Type to speak..." aria-label="Type text to convert to speech">
+                        <select id="tts-output-select" title="Select Audio Output" aria-label="Select Audio Output Device">
+                            <option value="default">Default Output</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="drag-handle" title="Drag to move panel" aria-hidden="true"></div>
+            </div>
+
+            <aside id="gesture-panel" aria-label="Gesture recognition panel" data-active="false" data-panel-state="docked" data-dragging="false">
+                <div class="gesture-panel-header">
+                    <span>Gesture Input</span>
+                    <div class="gesture-panel-actions">
+                        <button id="gesture-panel-disable" class="gesture-panel-toggle" type="button" aria-label="Close Sign Widget">Close</button>
+                        <span class="gesture-panel-dot" aria-hidden="true"></span>
+                    </div>
+                </div>
+                <div class="gesture-video-wrap">
+                    <video id="gesture-input-video" playsinline muted aria-label="Gesture camera feed"></video>
+                    <canvas id="gesture-overlay-canvas" aria-hidden="true"></canvas>
+                </div>
+                <div id="gesture-results" aria-live="polite">
+                    <div class="gesture-result-item">Waiting for camera...</div>
+                </div>
+                <div id="gesture-status" role="status" aria-live="polite">Gesture panel ready</div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Layer 3: Guidance -->
+    <div id="layer-3-guidance" role="dialog" aria-live="polite"></div>
+
+    <!-- Layer 4: Emergency -->
+    <div id="layer-4-emergency" role="alert" aria-live="assertive"></div>
+
+    <!-- Confusion Help -->
+    <div id="confusion-help" role="button" tabindex="0" aria-label="Get help with confusion">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+        <span id="confusion-msg">Need help?</span>
+    </div>
+
+    <!-- Audio Connection Guide Modal -->
+    <div id="audio-guide-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="audio-guide-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="audio-guide-title" class="modal-title">Connect to Zoom/FaceTime</h2>
+                <button class="modal-close" id="close-guide-btn" aria-label="Close modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px;">To let others hear the AI voice in calls, you need a <strong>Virtual Audio Cable</strong>.</p>
+                <ol style="padding-left: 20px; line-height: 2; margin-bottom: 0;">
+                    <li>Install <strong>BlackHole 2ch</strong> or <strong>VB-Cable</strong> (Free).</li>
+                    <li>In Relay, select the Cable as <strong>Audio Output</strong>.</li>
+                    <li>In Zoom/Teams, select the Cable as your <strong>Microphone</strong>.</li>
+                </ol>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="audio-guide-ok">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meeting Summary Modal -->
+    <div id="meeting-summary-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="summary-title">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h2 id="summary-title" class="modal-title">Meeting Summary</h2>
+                <button class="modal-close" id="close-summary-btn" aria-label="Close summary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="meeting-summary-content" style="white-space: pre-wrap;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="copy-summary-btn">Copy</button>
+                <button class="btn-primary" id="export-summary-btn">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>

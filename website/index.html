@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relay | Real-Time Accessibility Overlay</title>
+    <meta
+      name="description"
+      content="Relay is a real-time accessibility overlay with Deaf and Blind modes, live captions, on-device gesture input, sound alerts, and AI screen assistance."
+    />
+    <link rel="icon" href="assets/icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" role="banner">
+      <div class="shell nav-wrap">
+        <a href="#" class="brand" aria-label="Relay home">
+          <img src="assets/icon.png" width="34" height="34" alt="" />
+          <span>Relay</span>
+        </a>
+
+        <button class="menu-btn" aria-expanded="false" aria-controls="primary-nav" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+        </button>
+
+        <nav id="primary-nav" class="primary-nav" aria-label="Primary">
+          <a href="#workflow">Workflow</a>
+          <a href="#modes">Modes</a>
+          <a href="#gesture">Gesture Input</a>
+          <a href="#commands">Commands</a>
+          <a href="#download">Download</a>
+          <a href="https://github.com/pythonstuff8/relay-app" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-noise" aria-hidden="true"></div>
+        <div class="shell hero-grid">
+          <div class="hero-copy reveal">
+            <p class="eyebrow">Production Build</p>
+            <h1>
+              Accessibility controls that stay
+              <span>live across every app.</span>
+            </h1>
+            <p class="lead">
+              Relay provides real-time captions, environmental sound alerts, wake-word voice command routing,
+              and on-device gesture input in Deaf mode.
+            </p>
+
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#download">Download Latest Build</a>
+              <a class="btn btn-ghost" href="https://github.com/pythonstuff8/relay-app" target="_blank" rel="noopener">View Source</a>
+            </div>
+
+            <div class="command-preview" aria-label="System capabilities">
+              <span>Deepgram Nova-3</span>
+              <span>MediaPipe Gestures</span>
+              <span>Hey Relay Wake Word</span>
+              <span>GPT Screen Explain</span>
+              <span>Meeting Summaries</span>
+            </div>
+          </div>
+
+          <div class="hero-panel reveal" aria-label="Pipeline overview">
+            <div class="status-row">
+              <span class="dot"></span>
+              <strong>LISTENING + CLASSIFYING</strong>
+            </div>
+            <p class="caption-line"><b>Speaker 1</b> "Hey Relay, describe this screen."</p>
+            <div class="divider"></div>
+            <div class="hero-meta">
+              <article>
+                <h3>1. Live Input</h3>
+                <p>Captions stream with diarization while sound events are classified in parallel.</p>
+              </article>
+              <article>
+                <h3>2. Command Routing</h3>
+                <p>Voice commands are normalized, wake-gated, and routed to assistive actions.</p>
+              </article>
+              <article>
+                <h3>3. Assistive Output</h3>
+                <p>Screen explanation, navigation help, and transcript tools are triggered in real time.</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow" class="section shell">
+        <div class="section-head reveal">
+          <p class="eyebrow">Workflow</p>
+          <h2>Audio, gesture, and command flow in one overlay</h2>
+          <p class="subhead">Relay combines captioning, command interpretation, and assistive action execution.</p>
+        </div>
+
+        <div class="modes-grid">
+          <article class="mode-card reveal">
+            <h3>Capture</h3>
+            <p>Microphone/system audio, optional webcam gestures, and active-app context are captured continuously.</p>
+          </article>
+          <article class="mode-card reveal">
+            <h3>Interpret</h3>
+            <p>Wake phrase routing, typo-tolerant command parsing, and context-aware automation planning.</p>
+          </article>
+          <article class="mode-card reveal">
+            <h3>Respond</h3>
+            <p>Captions, spoken feedback, visual alerts, transcript tools, and AI guidance update immediately.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="modes" class="section shell">
+        <div class="section-head reveal">
+          <p class="eyebrow">Accessibility Modes</p>
+          <h2>Purpose-built mode behavior</h2>
+        </div>
+        <div class="modes-grid">
+          <article class="mode-card reveal">
+            <h3>Deaf Mode</h3>
+            <p>Captions + tone cues stay visible, and the right panel runs MediaPipe gesture recognition from webcam input.</p>
+          </article>
+          <article class="mode-card reveal">
+            <h3>Blind Mode</h3>
+            <p>Voice navigation, screen explanation, and audio feedback stay primary while gesture input is disabled.</p>
+          </article>
+          <article class="mode-card reveal">
+            <h3>Mode Switcher</h3>
+            <p>Quick in-overlay switch persists mode preference and updates UI behavior immediately.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="gesture" class="section shell avatar-section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Gesture Input</p>
+          <h2>On-device hand tracking in Deaf mode</h2>
+        </div>
+
+        <div class="avatar-layout">
+          <div class="avatar-canvas reveal" aria-hidden="true">
+            <div class="avatar-orb"></div>
+            <div class="avatar-card">
+              <div class="avatar-card-top">Gesture Panel</div>
+              <div class="avatar-figure"></div>
+            </div>
+          </div>
+
+          <ul class="avatar-points reveal" aria-label="Gesture engine details">
+            <li>Live webcam feed with landmark overlay and gesture confidence display.</li>
+            <li>Confidence thresholding (70%+) to reduce accidental command triggers.</li>
+            <li>Two-hand detection support with stable panel status updates.</li>
+            <li>Mapped command gestures: thumbs up/down, open palm, and pointing up.</li>
+            <li>Gesture and speech commands share the same central routing pipeline.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="commands" class="section shell">
+        <div class="section-head reveal">
+          <p class="eyebrow">Voice + AI Controls</p>
+          <h2>Wake-word command library with assistive actions</h2>
+          <p class="subhead">Every spoken command is routed through the wake phrase flow.</p>
+        </div>
+
+        <div class="command-grid reveal" role="list" aria-label="Supported voice commands">
+          <span role="listitem">help</span>
+          <span role="listitem">read</span>
+          <span role="listitem">caption</span>
+          <span role="listitem">navigate</span>
+          <span role="listitem">click</span>
+          <span role="listitem">scroll</span>
+          <span role="listitem">stop</span>
+          <span role="listitem">listen</span>
+          <span role="listitem">repeat</span>
+          <span role="listitem">explain</span>
+          <span role="listitem">meeting</span>
+          <span role="listitem">transcript</span>
+          <span role="listitem">settings</span>
+          <span role="listitem">larger</span>
+          <span role="listitem">smaller</span>
+        </div>
+      </section>
+
+      <section class="section shell reliability">
+        <div class="section-head reveal">
+          <p class="eyebrow">Reliability</p>
+          <h2>Engineered for recovery and consistency</h2>
+        </div>
+
+        <div class="reliability-grid">
+          <article class="reliability-card reveal">
+            <h3>Input Guardrails</h3>
+            <p>Wake gating, command dedupe, and confidence checks reduce accidental triggers.</p>
+          </article>
+          <article class="reliability-card reveal">
+            <h3>Mode Isolation</h3>
+            <p>Blind and Deaf mode behavior switches deterministically with persisted settings.</p>
+          </article>
+          <article class="reliability-card reveal">
+            <h3>Operational Fallbacks</h3>
+            <p>Whisper fallback and resilient IPC handling keep critical workflows available.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="download" class="section shell download">
+        <div class="section-head reveal">
+          <p class="eyebrow">Download</p>
+          <h2>Release packages for macOS, Windows, and Linux</h2>
+            <p class="subhead">
+            Latest binaries are published in GitHub Releases with direct download links below.
+          </p>
+        </div>
+
+        <div class="security-note reveal" role="note" aria-label="Unsigned build notice">
+          <h3>Important: These builds are currently unsigned</h3>
+          <p>
+            You may need to approve the app manually in OS security prompts. On macOS use
+            <code>Privacy &amp; Security</code> then <code>Open Anyway</code>. On Windows, SmartScreen may require
+            <code>More info</code> then <code>Run anyway</code>. On Linux, mark AppImage executable before launch.
+          </p>
+        </div>
+
+        <div class="download-cards download-cards-3">
+          <article class="download-card reveal">
+            <h3>macOS</h3>
+            <p>Direct DMG downloads for Apple Silicon and Intel.</p>
+            <a class="btn btn-primary" href="https://github.com/pythonstuff8/relay-app/releases/latest/download/Relay-mac-arm64.dmg" target="_blank" rel="noopener">Download macOS (Apple Silicon)</a>
+            <a class="btn btn-ghost" href="https://github.com/pythonstuff8/relay-app/releases/latest/download/Relay-mac-x64.dmg" target="_blank" rel="noopener">Download macOS (Intel)</a>
+          </article>
+
+          <article class="download-card reveal">
+            <h3>Windows</h3>
+            <p>Direct installer download for x64.</p>
+            <a class="btn btn-primary" href="https://github.com/pythonstuff8/relay-app/releases/latest/download/Relay-windows-x64-setup.exe" target="_blank" rel="noopener">Download Windows Installer</a>
+          </article>
+
+          <article class="download-card reveal">
+            <h3>Linux</h3>
+            <p>Direct x64 downloads for AppImage and .deb.</p>
+            <a class="btn btn-primary" href="https://github.com/pythonstuff8/relay-app/releases/latest/download/Relay-linux-x64.AppImage" target="_blank" rel="noopener">Download Linux AppImage</a>
+            <a class="btn btn-ghost" href="https://github.com/pythonstuff8/relay-app/releases/latest/download/Relay-linux-x64.deb" target="_blank" rel="noopener">Download Linux .deb</a>
+          </article>
+        </div>
+
+        <div class="download-cards">
+          <article class="download-card reveal">
+            <h3>Source</h3>
+            <p>Build and run locally from source.</p>
+            <code>git clone https://github.com/pythonstuff8/relay-app.git</code>
+            <code>cd relay-app && npm install && npm start</code>
+          </article>
+          <article class="download-card reveal">
+            <h3>API Keys</h3>
+            <p>Set keys in project root before running full AI/caption workflow.</p>
+            <code>OPENAI_API_KEY=your_openai_key</code>
+            <code>DEEPGRAM_API_KEY=your_deepgram_key</code>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-row">
+        <p>Relay</p>
+        <div>
+          <a href="https://github.com/pythonstuff8/relay-app" target="_blank" rel="noopener">Source</a>
+          <a href="https://github.com/pythonstuff8/relay-app/issues" target="_blank" rel="noopener">Issues</a>
+          <a href="https://github.com/pythonstuff8/relay-app/releases" target="_blank" rel="noopener">Releases</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
+
+      document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+
+      const menuBtn = document.querySelector('.menu-btn');
+      const nav = document.querySelector('.primary-nav');
+      if (menuBtn && nav) {
+        menuBtn.addEventListener('click', () => {
+          const open = nav.classList.toggle('open');
+          menuBtn.setAttribute('aria-expanded', String(open));
+          menuBtn.classList.toggle('open', open);
+        });
+        nav.querySelectorAll('a').forEach((link) => {
+          link.addEventListener('click', () => {
+            nav.classList.remove('open');
+            menuBtn.classList.remove('open');
+            menuBtn.setAttribute('aria-expanded', 'false');
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

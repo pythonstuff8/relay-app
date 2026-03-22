@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relay Overlay</title>
+    <link rel="stylesheet" href="styles/design-system.css">
+
+    <style>
+        body,
+        html {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        /* === OVERLAY LAYER SYSTEM === */
+        #layer-0-status {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #layer-1-alerts {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 200;
+            pointer-events: none;
+        }
+
+        #layer-2-captions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 300;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        #layer-3-guidance {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 400;
+            pointer-events: none;
+        }
+
+        #layer-3-guidance > * {
+            pointer-events: auto;
+        }
+
+        #layer-4-emergency {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 500;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* === ALERT OVERLAY (legacy flash) === */
+        #alert-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        #alert-overlay.active {
+            opacity: 1;
+        }
+
+        #alert-overlay.danger {
+            background: rgba(255, 59, 48, 0.3);
+            box-shadow: inset 0 0 100px var(--color-emergency);
+        }
+
+        #alert-overlay.warning {
+            background: rgba(255, 204, 0, 0.3);
+            box-shadow: inset 0 0 100px var(--color-warning);
+        }
+
+        /* === CAPTION BAR === */
+        #caption-bar {
+            width: 100%;
+            max-width: 900px;
+            min-height: 80px;
+            max-height: 180px;
+            padding: 16px 24px;
+            display: flex;
+            flex-direction: column;
+            pointer-events: auto;
+
+            opacity: 0;
+            transform: translateY(20px);
+            animation: slideUpFade 0.6s var(--transition-smooth) forwards;
+        }
+
+        .caption-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--color-border);
+            margin-bottom: 8px;
+        }
+
+        .caption-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        @keyframes slideUpFade {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes alertPulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(255,59,48,0.3); }
+            50% { box-shadow: 0 4px 30px rgba(255,59,48,0.6); }
+        }
+
+        .conversation-text {
+            font-size: var(--font-size-xl);
+            font-weight: 500;
+            line-height: 1.3;
+            text-align: left;
+            transition: color 0.3s;
+            overflow-y: auto;
+            max-height: 100px;
+        }
+
+        .conversation-text .caption-segment {
+            margin-bottom: 4px;
+        }
+
+        .conversation-text .caption-word {
+            transition: opacity 0.15s;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: var(--font-size-xs);
+            color: var(--color-secondary);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* === MEETING MODE BADGE === */
+        #meeting-badge {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 59, 48, 0.15);
+            border: 1px solid rgba(255, 59, 48, 0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #ff6b6b;
+            margin-left: 10px;
+        }
+
+        .drag-handle {
+            width: 60px;
+            height: 5px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            margin: 8px auto 0 auto;
+            cursor: grab;
+            -webkit-app-region: drag;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .drag-handle:hover {
+            background: rgba(0, 0, 0, 0.4);
+            width: 80px;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-secondary);
+            transition: background-color 0.3s;
+        }
+
+        .dot.active {
+            background-color: var(--color-success);
+            box-shadow: 0 0 8px var(--color-success);
+        }
+
+        .dot.listening {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .tool-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--color-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+            margin-left: 8px;
+        }
+
+        .tool-btn:hover {
+            background: var(--color-background-dark);
+            color: var(--color-text-dark);
+        }
+
+        #tts-container {
+            display: none;
+            flex-direction: row;
+            width: 100%;
+            margin-top: 8px;
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+        }
+
+        #tts-container.active {
+            display: flex;
+        }
+
+        #tts-input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-border);
+            font-size: 16px;
+            outline: none;
+            background: var(--color-surface);
+            color: var(--color-text);
+        }
+
+        #video-container {
+            position: relative;
+            width: 160px;
+            height: 120px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--color-accent);
+            background: black;
+            display: none;
+            margin-top: 8px;
+        }
+
+        #video-container.active {
+            display: block;
+        }
+
+        #input_video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .close-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--color-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+        }
+
+        .close-btn:hover {
+            background: var(--color-emergency);
+            color: white;
+        }
+
+        #visualizer {
+            width: 60px;
+            height: 30px;
+            margin-right: 12px;
+        }
+
+        /* === CONFUSION HELP INDICATOR === */
+        #confusion-help {
+            position: fixed;
+            bottom: 210px;
+            left: 20px;
+            background: rgba(29, 29, 31, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 10px 14px;
+            color: #f5f5f7;
+            font-size: 13px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.3s ease;
+            z-index: 300;
+            max-width: 280px;
+        }
+
+        #confusion-help:hover {
+            background: rgba(0, 113, 227, 0.3);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="alert-overlay"></div>
+
+    <!-- Layer 0: Status -->
+    <div id="layer-0-status"></div>
+
+    <!-- Layer 1: Sound Alerts -->
+    <div id="layer-1-alerts" id="alert-container"></div>
+
+    <!-- Layer 2: Captions -->
+    <div id="layer-2-captions">
+        <div id="caption-bar" class="glass-panel">
+            <!-- Fixed Toolbar -->
+            <div class="caption-toolbar">
+                <div style="display:flex;align-items:center;">
+                    <div class="status-indicator">
+                        <div class="dot active listening"></div>
+                        <span id="status-text">Listening...</span>
+                    </div>
+                    <div id="meeting-badge"></div>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <canvas id="visualizer"></canvas>
+                    <div id="transcript-btn" class="tool-btn" title="Transcript History">📜</div>
+                    <div id="nav-toggle" class="tool-btn" title="Ask AI Guide (Cmd+Shift+H)">🧭</div>
+                    <div id="tts-toggle" class="tool-btn" title="Type to Speak">⌨️</div>
+                    <div id="minimize-btn" class="tool-btn" title="Minimize">−</div>
+                    <div id="close-btn" class="tool-btn" title="Close">✕</div>
+                </div>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div class="caption-content">
+                <div id="video-container">
+                    <video id="input_video"></video>
+                </div>
+                <div id="transcript" class="conversation-text">
+                    Waiting for speech...
+                </div>
+
+                <div id="tts-container">
+                    <input type="text" id="tts-input" placeholder="Type to speak...">
+                    <select id="tts-output-select" title="Select Audio Output">
+                        <option value="default">Default Output</option>
+                    </select>
+                    <div id="audio-help-btn" class="tool-btn"
+                        style="width: 20px; height: 20px; font-size: 12px; margin-left: 5px;">?</div>
+                </div>
+            </div>
+
+            <div class="drag-handle" title="Drag to move"></div>
+        </div>
+    </div>
+
+    <!-- Layer 3: Guidance (AI panels, command bar, screen explainer) -->
+    <div id="layer-3-guidance"></div>
+
+    <!-- Layer 4: Emergency (blocking modal) -->
+    <div id="layer-4-emergency"></div>
+
+    <!-- Confusion Help Indicator -->
+    <div id="confusion-help">
+        <span>💡</span>
+        <span id="confusion-msg">Need help?</span>
+    </div>
+
+    <!-- Audio Connection Guide Modal -->
+    <div id="audio-guide-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div
+            style="background: var(--color-surface); padding: 30px; border-radius: 16px; width: 400px; color: var(--color-text); border: 1px solid var(--color-border); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <h2 style="margin-top: 0;">🎧 Connect to Zoom/FaceTime</h2>
+            <p>To let others hear the AI voice in calls, you need a <b>Virtual Audio Cable</b>.</p>
+            <ol style="padding-left: 20px; line-height: 1.6;">
+                <li>Install <b>BlackHole 2ch</b> or <b>VB-Cable</b> (Free).</li>
+                <li>In Relay (here), select the Cable as <b>Audio Output</b>.</li>
+                <li>In Zoom/Teams, select the Cable as your <b>Microphone</b>.</li>
+            </ol>
+            <button id="close-guide-btn"
+                style="background: var(--color-accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; float: right; font-weight: 600;">Got
+                it</button>
+        </div>
+    </div>
+
+    <!-- Meeting Summary Modal -->
+    <div id="meeting-summary-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div style="background: var(--color-surface); padding: 30px; border-radius: 16px; width: 600px; max-height: 80vh; overflow-y: auto; color: var(--color-text); border: 1px solid var(--color-border); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h2 style="margin:0;">📝 Meeting Summary</h2>
+                <button id="close-summary-btn" style="background:rgba(255,255,255,0.1);border:none;color:var(--color-text);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;">✕</button>
+            </div>
+            <div id="meeting-summary-content" style="line-height:1.6;white-space:pre-wrap;"></div>
+            <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+                <button id="export-summary-btn" style="background:var(--color-accent);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:500;">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
