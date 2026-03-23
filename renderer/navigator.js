@@ -16,6 +16,7 @@ class RelayGuide {
         this.panelMode = 'docked';
         this.floatingPosition = { x: 20, y: 80 };
         this.viewportPadding = 10;
+        this.restoreOverlayHeight = 0;
 
         this.init();
     }
@@ -579,9 +580,6 @@ class RelayGuide {
         header.addEventListener('mousedown', (e) => {
             if (e.target.closest('button')) return;
             if (e.button !== 0) return;
-            const activeDragOwner = String(window.__relayActiveDragOwner || '');
-            if (activeDragOwner && activeDragOwner !== 'guide') return;
-            window.__relayActiveDragOwner = 'guide';
             e.preventDefault();
 
             if (this.panelMode !== 'floating') {
@@ -619,9 +617,6 @@ class RelayGuide {
             if (this.isDragging) {
                 this.isDragging = false;
                 document.body.style.userSelect = '';
-                if (String(window.__relayActiveDragOwner || '') === 'guide') {
-                    window.__relayActiveDragOwner = '';
-                }
                 if (typeof event?.clientX === 'number' && typeof event?.clientY === 'number') {
                     const target = document.elementFromPoint(event.clientX, event.clientY);
                     const overInteractive = Boolean(
@@ -642,9 +637,6 @@ class RelayGuide {
             if (!this.isDragging) return;
             this.isDragging = false;
             document.body.style.userSelect = '';
-            if (String(window.__relayActiveDragOwner || '') === 'guide') {
-                window.__relayActiveDragOwner = '';
-            }
         });
 
         window.addEventListener('resize', () => {
@@ -727,6 +719,7 @@ class RelayGuide {
     // =========================================================================
 
     open() {
+        this.restoreOverlayHeight = Math.max(180, Math.round(Number(window.innerHeight || 0) || 0));
         this.isOpen = true;
         this.container.classList.add('open');
         window.electronAPI?.expandOverlay();
@@ -745,16 +738,7 @@ class RelayGuide {
     close() {
         this.isOpen = false;
         this.container.classList.remove('open');
-        const mode = String(document.body?.dataset?.accessibilityMode || '').toLowerCase();
-        const adaptiveHeightFn = window.__relayGetOverlayHeightForMode;
-        const restoreHeight = typeof adaptiveHeightFn === 'function'
-            ? adaptiveHeightFn(mode === 'blind' ? 'blind' : 'deaf')
-            : (mode === 'blind' ? 220 : 680);
-        if (window.electronAPI?.setOverlayHeight) {
-            window.electronAPI.setOverlayHeight(restoreHeight);
-        } else {
-            window.electronAPI?.collapseOverlay();
-        }
+        window.electronAPI?.collapseOverlay();
 
         // Reset to ask view after animation
         setTimeout(() => {

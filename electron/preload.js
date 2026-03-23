@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // === NEW: Screen Explanation AI ===
     explainScreen: () => ipcRenderer.invoke('explain-screen'),
+    contextAssist: (payload) => ipcRenderer.invoke('context-assist', payload),
     askFollowUp: (question, context) => ipcRenderer.invoke('ask-follow-up', question, context),
     captureScreen: (options) => ipcRenderer.invoke('capture-screen', options),
     analyzeImage: (imageData, options) => ipcRenderer.invoke('analyze-image', imageData, options),

@@ -56,6 +56,7 @@ const meetingBadge = document.getElementById('meeting-badge');
 const confusionHelp = document.getElementById('confusion-help');
 const confusionMsg = document.getElementById('confusion-msg');
 const gesturePanel = document.getElementById('gesture-panel');
+const gesturePanelSpacer = document.getElementById('gesture-panel-spacer');
 const gestureWidgetToggleBtn = document.getElementById('gesture-widget-toggle');
 const gesturePanelDisableBtn = document.getElementById('gesture-panel-disable');
 
@@ -119,6 +120,11 @@ const gestureSpeechState = {
 const immediateStopState = {
     lastTs: 0
 };
+const contextualWakeAssistState = {
+    inFlight: false,
+    lastPrompt: '',
+    lastTs: 0
+};
 let gestureWidgetOpen = true;
 const ROUTABLE_GESTURE_COMMANDS = new Set(['yes', 'no', 'stop', 'click']);
 const SPOKEN_GESTURE_BY_ID = new Map([
@@ -135,20 +141,6 @@ function toGestureLookupKey(value) {
     return String(value || '')
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '');
-}
-
-function claimDragOwner(owner) {
-    const currentOwner = String(window.__relayActiveDragOwner || '');
-    if (currentOwner && currentOwner !== owner) return false;
-    window.__relayActiveDragOwner = owner;
-    return true;
-}
-
-function releaseDragOwner(owner) {
-    const currentOwner = String(window.__relayActiveDragOwner || '');
-    if (!owner || currentOwner === owner) {
-        window.__relayActiveDragOwner = '';
-    }
 }
 
 function toSpokenGestureText(value) {
@@ -227,6 +219,15 @@ async function loadSettings() {
 const clickThroughState = {
     ignoringMouse: null
 };
+const mainWidgetDragState = {
+    isDragging: false,
+    startMouseX: 0,
+    startMouseY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    offsetX: 0,
+    offsetY: 0
+};
 
 function setOverlayIgnoreMouse(ignore) {
     if (clickThroughState.ignoringMouse === Boolean(ignore)) return;
@@ -252,7 +253,7 @@ function isVisibleInteractiveRoot(node) {
 function isMouseOverRelayUi(target) {
     if (!target || !(target instanceof Element)) return false;
     const interactiveRoot = target.closest(
-        '#caption-bar, #gesture-panel, #layer-3-guidance, #layer-4-emergency, #confusion-help, #audio-guide-modal, #meeting-summary-modal, .modal-overlay, #mode-dropdown'
+        '#caption-bar, #gesture-panel, #layer-1-alerts, #layer-3-guidance, #layer-4-emergency, #confusion-help, #audio-guide-modal, #meeting-summary-modal, .modal-overlay, #mode-dropdown'
     );
     if (!interactiveRoot) return false;
     return isVisibleInteractiveRoot(interactiveRoot);
@@ -266,35 +267,28 @@ function syncClickThroughFromPointer(clientX, clientY) {
 
 function handlePointerSync(event) {
     if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+    if (mainWidgetDragState.isDragging) return;
     syncClickThroughFromPointer(event.clientX, event.clientY);
 }
 
 document.addEventListener('mousemove', handlePointerSync, true);
 document.addEventListener('mousedown', handlePointerSync, true);
 document.addEventListener('mouseup', handlePointerSync, true);
-window.addEventListener('focus', () => setOverlayIgnoreMouse(true));
+window.addEventListener('focus', () => {
+    mainWidgetDragState.isDragging = false;
+    document.body.style.userSelect = '';
+    setOverlayIgnoreMouse(false);
+});
 window.addEventListener('blur', () => {
+    mainWidgetDragState.isDragging = false;
+    document.body.style.userSelect = '';
     setOverlayIgnoreMouse(true);
-    releaseDragOwner();
     gesturePanelDockState.isDragging = false;
     if (gesturePanel) gesturePanel.dataset.dragging = 'false';
-    captionPanelDockState.isDragging = false;
-    if (captionBar) captionBar.dataset.dragging = 'false';
 });
-window.addEventListener('mouseleave', () => setOverlayIgnoreMouse(true), true);
-setOverlayIgnoreMouse(true);
+setOverlayIgnoreMouse(false);
 
-function bindInteractiveHover(root) {
-    if (!root) return;
-    root.addEventListener('mouseenter', () => setOverlayIgnoreMouse(false), true);
-    root.addEventListener('mouseleave', () => setOverlayIgnoreMouse(true), true);
-}
-
-bindInteractiveHover(captionBar);
-bindInteractiveHover(gesturePanel);
-bindInteractiveHover(guidanceLayer);
-bindInteractiveHover(document.getElementById('layer-4-emergency'));
-bindInteractiveHover(confusionHelp);
+const captionToolbarForDrag = captionBar?.querySelector('.caption-toolbar');
 
 const gesturePanelDockState = {
     mode: 'docked',
@@ -304,15 +298,6 @@ const gesturePanelDockState = {
     floatingX: 16,
     floatingY: 16
 };
-const captionPanelDockState = {
-    isDragging: false,
-    startMouseX: 0,
-    startMouseY: 0,
-    startOffsetX: 0,
-    startOffsetY: 0,
-    offsetX: 0,
-    offsetY: 0
-};
 
 function clampNumber(value, min, max) {
     const numeric = Number(value);
@@ -321,6 +306,83 @@ function clampNumber(value, min, max) {
     const upper = Math.max(lower, upperCandidate);
     if (!Number.isFinite(numeric)) return lower;
     return Math.max(lower, Math.min(upper, numeric));
+}
+
+function resolveMainWidgetBaseRect() {
+    if (!captionBar) return { left: 0, top: 0, width: 900, height: 230 };
+    const rect = captionBar.getBoundingClientRect();
+    const width = rect.width || captionBar.offsetWidth || 900;
+    const height = rect.height || captionBar.offsetHeight || 230;
+    return {
+        left: rect.left - mainWidgetDragState.offsetX,
+        top: rect.top - mainWidgetDragState.offsetY,
+        width,
+        height
+    };
+}
+
+function clampMainWidgetOffset(x, y) {
+    const baseRect = resolveMainWidgetBaseRect();
+    const pad = 8;
+    const minX = pad - baseRect.left;
+    const maxX = window.innerWidth - pad - (baseRect.left + baseRect.width);
+    const minY = pad - baseRect.top;
+    const maxY = window.innerHeight - pad - (baseRect.top + baseRect.height);
+    return {
+        x: clampNumber(x, minX, maxX),
+        y: clampNumber(y, minY, maxY)
+    };
+}
+
+function applyMainWidgetOffset(x, y) {
+    if (!captionBar) return;
+    const clamped = clampMainWidgetOffset(x, y);
+    mainWidgetDragState.offsetX = clamped.x;
+    mainWidgetDragState.offsetY = clamped.y;
+    if (clamped.x === 0 && clamped.y === 0) {
+        captionBar.style.transform = '';
+    } else {
+        captionBar.style.transform = `translate(${clamped.x}px, ${clamped.y}px)`;
+    }
+}
+
+function setupMainWidgetDrag() {
+    if (!captionToolbarForDrag || !captionBar) return;
+
+    const pinMouse = () => setOverlayIgnoreMouse(false);
+    captionToolbarForDrag.addEventListener('mouseenter', pinMouse, true);
+    captionToolbarForDrag.addEventListener('mousemove', pinMouse, true);
+    captionToolbarForDrag.addEventListener('mousedown', (event) => {
+        pinMouse();
+        if (event.button !== 0) return;
+        if (event.target.closest('button, input, select, textarea, a')) return;
+        event.preventDefault();
+        mainWidgetDragState.isDragging = true;
+        mainWidgetDragState.startMouseX = event.clientX;
+        mainWidgetDragState.startMouseY = event.clientY;
+        mainWidgetDragState.startOffsetX = mainWidgetDragState.offsetX;
+        mainWidgetDragState.startOffsetY = mainWidgetDragState.offsetY;
+        document.body.style.userSelect = 'none';
+    }, true);
+
+    document.addEventListener('mousemove', (event) => {
+        if (!mainWidgetDragState.isDragging) return;
+        const dx = event.clientX - mainWidgetDragState.startMouseX;
+        const dy = event.clientY - mainWidgetDragState.startMouseY;
+        applyMainWidgetOffset(
+            mainWidgetDragState.startOffsetX + dx,
+            mainWidgetDragState.startOffsetY + dy
+        );
+    });
+
+    document.addEventListener('mouseup', (event) => {
+        if (!mainWidgetDragState.isDragging) return;
+        mainWidgetDragState.isDragging = false;
+        document.body.style.userSelect = '';
+        if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+            syncClickThroughFromPointer(event.clientX, event.clientY);
+        }
+    });
 }
 
 function updateGesturePanelDockStateOnBody() {
@@ -338,16 +400,6 @@ function resolveGesturePanelSize() {
     return { width, height };
 }
 
-function resolveCaptionPanelSize() {
-    if (!captionBar) return { left: 0, top: 0, width: 900, height: 230 };
-    const rect = captionBar.getBoundingClientRect();
-    const left = rect.left || captionBar.offsetLeft || 0;
-    const top = rect.top || captionBar.offsetTop || 0;
-    const width = rect.width || captionBar.offsetWidth || 900;
-    const height = rect.height || captionBar.offsetHeight || 230;
-    return { left, top, width, height };
-}
-
 function clampGestureFloatingPosition(x, y) {
     const { width, height } = resolveGesturePanelSize();
     const pad = 8;
@@ -356,21 +408,6 @@ function clampGestureFloatingPosition(x, y) {
     return {
         x: clampNumber(x, pad, maxX),
         y: clampNumber(y, pad, maxY)
-    };
-}
-
-function clampCaptionPanelOffset(x, y) {
-    const { left, top, width, height } = resolveCaptionPanelSize();
-    const pad = 8;
-    const baseLeft = left - captionPanelDockState.offsetX;
-    const baseTop = top - captionPanelDockState.offsetY;
-    const minX = pad - baseLeft;
-    const maxX = window.innerWidth - pad - (baseLeft + width);
-    const minY = pad - baseTop;
-    const maxY = window.innerHeight - pad - (baseTop + height);
-    return {
-        x: clampNumber(x, minX, maxX),
-        y: clampNumber(y, minY, maxY)
     };
 }
 
@@ -388,14 +425,7 @@ function dockGesturePanel({ resetFloating = false } = {}) {
         gesturePanelDockState.floatingY = 16;
     }
     updateGesturePanelDockStateOnBody();
-}
-
-function resetCaptionPanelPosition() {
-    if (!captionBar) return;
-    captionPanelDockState.offsetX = 0;
-    captionPanelDockState.offsetY = 0;
-    captionBar.dataset.dragging = 'false';
-    captionBar.style.transform = '';
+    syncGesturePanelSpacer();
 }
 
 function floatGesturePanelAt(x, y) {
@@ -409,30 +439,23 @@ function floatGesturePanelAt(x, y) {
     gesturePanel.style.right = 'auto';
     gesturePanel.style.bottom = 'auto';
     updateGesturePanelDockStateOnBody();
-}
-
-function moveCaptionPanelToOffset(x, y) {
-    if (!captionBar) return;
-    const clamped = clampCaptionPanelOffset(x, y);
-    captionPanelDockState.offsetX = clamped.x;
-    captionPanelDockState.offsetY = clamped.y;
-    if (clamped.x === 0 && clamped.y === 0) {
-        captionBar.style.transform = '';
-        return;
-    }
-    captionBar.style.transform = `translate(${clamped.x}px, ${clamped.y}px)`;
+    syncGesturePanelSpacer();
 }
 
 function clampFloatingPanelsAfterResize() {
-    if (captionBar && (captionPanelDockState.offsetX !== 0 || captionPanelDockState.offsetY !== 0)) {
-        moveCaptionPanelToOffset(captionPanelDockState.offsetX, captionPanelDockState.offsetY);
-    }
     if (gesturePanel && gesturePanelDockState.mode === 'floating') {
         floatGesturePanelAt(gesturePanelDockState.floatingX, gesturePanelDockState.floatingY);
     }
+    syncGesturePanelSpacer();
     if (window.cvNavigator?.repositionDocked) {
         window.cvNavigator.repositionDocked();
     }
+}
+
+function syncGesturePanelSpacer() {
+    if (!gesturePanelSpacer || !gesturePanel) return;
+    const inLayoutFlow = gesturePanelDockState.mode !== 'floating' && gesturePanel.style.display !== 'none';
+    gesturePanelSpacer.style.display = inLayoutFlow ? 'none' : 'block';
 }
 
 function setupGesturePanelDocking() {
@@ -446,7 +469,6 @@ function setupGesturePanelDocking() {
         if (event.button !== 0) return;
         if (event.target.closest('button, input, select, textarea, a')) return;
         if (String(document.body?.dataset?.accessibilityMode || '').toLowerCase() === 'blind') return;
-        if (!claimDragOwner('gesture')) return;
 
         event.preventDefault();
         const rect = gesturePanel.getBoundingClientRect();
@@ -477,64 +499,14 @@ function setupGesturePanelDocking() {
         if (!gesturePanelDockState.isDragging) return;
         gesturePanelDockState.isDragging = false;
         gesturePanel.dataset.dragging = 'false';
-        releaseDragOwner('gesture');
         if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number') {
             syncClickThroughFromPointer(event.clientX, event.clientY);
         }
     });
 }
-
-function setupCaptionPanelDocking() {
-    if (!captionBar) return;
-    const panelToolbar = captionBar.querySelector('.caption-toolbar');
-    const panelHandle = captionBar.querySelector('.drag-handle');
-    const dragTargets = [panelToolbar, panelHandle].filter(Boolean);
-    if (dragTargets.length === 0) return;
-
-    const beginDrag = (event) => {
-        if (event.button !== 0) return;
-        if (event.target.closest('button, input, select, textarea, a')) return;
-        if (!claimDragOwner('caption')) return;
-
-        event.preventDefault();
-        captionPanelDockState.isDragging = true;
-        captionPanelDockState.startMouseX = event.clientX;
-        captionPanelDockState.startMouseY = event.clientY;
-        captionPanelDockState.startOffsetX = captionPanelDockState.offsetX;
-        captionPanelDockState.startOffsetY = captionPanelDockState.offsetY;
-        captionBar.dataset.dragging = 'true';
-        setOverlayIgnoreMouse(false);
-    };
-
-    dragTargets.forEach((target) => {
-        target.addEventListener('mousedown', beginDrag);
-        target.addEventListener('dblclick', () => {
-            resetCaptionPanelPosition();
-        });
-    });
-
-    document.addEventListener('mousemove', (event) => {
-        if (!captionPanelDockState.isDragging) return;
-        const deltaX = event.clientX - captionPanelDockState.startMouseX;
-        const deltaY = event.clientY - captionPanelDockState.startMouseY;
-        const nextOffsetX = captionPanelDockState.startOffsetX + deltaX;
-        const nextOffsetY = captionPanelDockState.startOffsetY + deltaY;
-        moveCaptionPanelToOffset(nextOffsetX, nextOffsetY);
-    });
-
-    document.addEventListener('mouseup', (event) => {
-        if (!captionPanelDockState.isDragging) return;
-        captionPanelDockState.isDragging = false;
-        captionBar.dataset.dragging = 'false';
-        releaseDragOwner('caption');
-        if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number') {
-            syncClickThroughFromPointer(event.clientX, event.clientY);
-        }
-    });
-}
-
-setupCaptionPanelDocking();
+setupMainWidgetDrag();
 setupGesturePanelDocking();
+syncGesturePanelSpacer();
 
 // ============================================
 // INITIALIZE MODULES
@@ -1580,6 +1552,8 @@ function applyGestureWidgetForCurrentMode() {
 
     if (shouldShow) {
         gesturePanel.style.display = 'flex';
+        gesturePanel.style.visibility = 'visible';
+        gesturePanel.style.pointerEvents = '';
         if (gesturePanelDockState.mode !== 'floating') {
             dockGesturePanel();
         } else {
@@ -1588,13 +1562,29 @@ function applyGestureWidgetForCurrentMode() {
         gestureInput.start().catch((error) => {
             window.electronAPI?.log?.(`[GestureInput] start failed: ${error?.message || error}`);
         });
+        syncGesturePanelSpacer();
         return;
     }
 
     gestureInput.stop();
-    dockGesturePanel();
-    gesturePanel.style.display = 'none';
     gesturePanel.dataset.active = 'false';
+    if (mode === 'blind') {
+        if (gesturePanelDockState.mode === 'floating') {
+            gesturePanel.style.display = 'none';
+        } else {
+            // Keep dock geometry stable between Deaf/Blind so the main panel does not shift.
+            gesturePanel.style.display = 'flex';
+            gesturePanel.style.visibility = 'hidden';
+            gesturePanel.style.pointerEvents = 'none';
+        }
+        syncGesturePanelSpacer();
+        return;
+    }
+    dockGesturePanel();
+    gesturePanel.style.visibility = 'visible';
+    gesturePanel.style.pointerEvents = '';
+    gesturePanel.style.display = 'none';
+    syncGesturePanelSpacer();
 }
 
 function setGestureWidgetOpen(nextOpen) {
@@ -1636,7 +1626,6 @@ window.addEventListener('mode-changed', (e) => {
         case 'deaf':
             blindMode.deactivate();
             setBlindModeMinimalControls(false);
-            window.electronAPI?.setOverlayHeight?.(getAdaptiveOverlayHeight('deaf'));
             applyGestureWidgetForCurrentMode();
             if (transcriptBtn) transcriptBtn.style.display = '';
             // Activate tone captioning
@@ -1652,7 +1641,6 @@ window.addEventListener('mode-changed', (e) => {
         case 'blind':
             blindMode.activate();
             setBlindModeMinimalControls(true);
-            window.electronAPI?.setOverlayHeight?.(getAdaptiveOverlayHeight('blind'));
             applyGestureWidgetForCurrentMode();
             if (transcriptBtn) transcriptBtn.style.display = 'none';
             // Deactivate tone captioning (not needed for blind)
@@ -1666,19 +1654,15 @@ window.addEventListener('mode-changed', (e) => {
             }
             break;
     }
+
+    requestAnimationFrame(() => {
+        applyMainWidgetOffset(mainWidgetDragState.offsetX, mainWidgetDragState.offsetY);
+    });
 });
 
-let overlayResizeDebounce = null;
 window.addEventListener('resize', () => {
+    applyMainWidgetOffset(mainWidgetDragState.offsetX, mainWidgetDragState.offsetY);
     clampFloatingPanelsAfterResize();
-    if (window.cvNavigator?.isOpen) return;
-    clearTimeout(overlayResizeDebounce);
-    overlayResizeDebounce = setTimeout(() => {
-        const mode = String(document.body?.dataset?.accessibilityMode || appSettings.accessibilityMode || 'deaf').toLowerCase() === 'blind'
-            ? 'blind'
-            : 'deaf';
-        window.electronAPI?.setOverlayHeight?.(getAdaptiveOverlayHeight(mode));
-    }, 120);
 });
 
 // Listen for mode switcher ready
@@ -2044,7 +2028,10 @@ const DEEPGRAM_SUPPRESSED_PREFIXES = [
     'control activated',
     'capturing image',
     'image description',
-    'target not found'
+    'target not found',
+    'i can t see',
+    'please provide a clearer',
+    'please provide clearer'
 ];
 
 const DEEPGRAM_SUPPRESSED_CONTAINS = [
@@ -2053,7 +2040,10 @@ const DEEPGRAM_SUPPRESSED_CONTAINS = [
     ' relay blind mode activated',
     ' voice navigation enabled',
     ' help to hear ',
-    ' command list'
+    ' command list',
+    'adjust the lighting',
+    'clearer view or more light',
+    'for better visibility'
 ];
 
 function shouldIgnoreDeepgramPhrase(normalized) {
@@ -2073,6 +2063,308 @@ function shouldIgnoreDeepgramPhrase(normalized) {
         return true;
     }
     return false;
+}
+
+function shouldSkipContextualWakeFallback(normalized) {
+    const text = String(normalized || '').trim();
+    if (!text) return true;
+    return /^(help|read|caption|captions|navigate|click|type|press|stop|listen|repeat|explain|describe|meeting|settings|larger|smaller|open)$/i.test(text);
+}
+
+function estimateDataUrlBytes(dataUrl) {
+    const source = String(dataUrl || '');
+    const commaIndex = source.indexOf(',');
+    if (commaIndex < 0) return 0;
+    const b64 = source.slice(commaIndex + 1);
+    const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+    return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+function captureFrameFromVideoElement(videoEl) {
+    if (!videoEl) return null;
+    if (videoEl.readyState < 2) return null;
+    const width = Number(videoEl.videoWidth || 0);
+    const height = Number(videoEl.videoHeight || 0);
+    if (width <= 1 || height <= 1) return null;
+
+    const maxWidth = 1280;
+    const scale = width > maxWidth ? (maxWidth / width) : 1;
+    const targetWidth = Math.max(2, Math.round(width * scale));
+    const targetHeight = Math.max(2, Math.round(height * scale));
+    const canvasEl = document.createElement('canvas');
+    canvasEl.width = targetWidth;
+    canvasEl.height = targetHeight;
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(videoEl, 0, 0, targetWidth, targetHeight);
+    let avgLuma = 0;
+    try {
+        const sampleWidth = Math.max(4, Math.min(80, targetWidth));
+        const sampleHeight = Math.max(4, Math.min(80, targetHeight));
+        const sample = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+        let sum = 0;
+        let pixels = 0;
+        for (let i = 0; i < sample.length; i += 4) {
+            const r = sample[i];
+            const g = sample[i + 1];
+            const b = sample[i + 2];
+            sum += (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+            pixels += 1;
+        }
+        avgLuma = pixels > 0 ? (sum / pixels) : 0;
+    } catch {}
+
+    const dataUrl = canvasEl.toDataURL('image/jpeg', 0.82);
+    return {
+        dataUrl,
+        width: targetWidth,
+        height: targetHeight,
+        avgLuma,
+        bytes: estimateDataUrlBytes(dataUrl)
+    };
+}
+
+async function captureQuickCameraSnapshotDataUrl() {
+    const startedAt = Date.now();
+    try {
+        const liveGestureVideo = document.getElementById('gesture-input-video');
+        const liveFrame = captureFrameFromVideoElement(liveGestureVideo);
+        if (liveFrame?.dataUrl) {
+            window.electronAPI?.log?.(
+                `[ContextAssist] step=2 camera_capture source=gesture_live ` +
+                `width=${liveFrame.width} height=${liveFrame.height} bytes=${liveFrame.bytes} ` +
+                `avg_luma=${Number(liveFrame.avgLuma || 0).toFixed(1)} latency_ms=${Date.now() - startedAt}`
+            );
+            return {
+                ...liveFrame,
+                source: 'gesture_live',
+                error: ''
+            };
+        }
+    } catch {}
+
+    let stream = null;
+    let tempVideo = null;
+    try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            return { dataUrl: '', source: 'unavailable', width: 0, height: 0, bytes: 0, avgLuma: 0, error: 'getUserMedia_unavailable' };
+        }
+        window.electronAPI?.log?.('[ContextAssist] step=2 camera_capture source=temp_stream status=request_start');
+        const mediaPromise = navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'user',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('camera_snapshot_timeout')), 2200);
+        });
+        stream = await Promise.race([mediaPromise, timeoutPromise]);
+        tempVideo = document.createElement('video');
+        tempVideo.muted = true;
+        tempVideo.playsInline = true;
+        tempVideo.autoplay = true;
+        tempVideo.srcObject = stream;
+        await tempVideo.play();
+        await new Promise((resolve) => {
+            if (tempVideo.readyState >= 2 && tempVideo.videoWidth > 1) {
+                resolve();
+                return;
+            }
+            const done = () => resolve();
+            tempVideo.addEventListener('loadeddata', done, { once: true });
+            setTimeout(done, 450);
+        });
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const sampledFrames = [];
+        // Give auto-exposure/white-balance a short warmup and sample multiple frames.
+        for (let i = 0; i < 5; i += 1) {
+            if (i > 0) await wait(180);
+            const sample = captureFrameFromVideoElement(tempVideo);
+            if (sample?.dataUrl) {
+                sampledFrames.push(sample);
+            }
+        }
+        const frame = sampledFrames.sort((a, b) => {
+            const lumaDelta = Number(b.avgLuma || 0) - Number(a.avgLuma || 0);
+            if (Math.abs(lumaDelta) > 0.6) return lumaDelta;
+            return Number(b.bytes || 0) - Number(a.bytes || 0);
+        })[0] || null;
+        if (frame?.dataUrl) {
+            const lumaSamples = sampledFrames
+                .map((item) => Number(item.avgLuma || 0).toFixed(1))
+                .join(',');
+            window.electronAPI?.log?.(
+                `[ContextAssist] step=2 camera_capture source=temp_stream ` +
+                `width=${frame.width} height=${frame.height} bytes=${frame.bytes} ` +
+                `avg_luma=${Number(frame.avgLuma || 0).toFixed(1)} ` +
+                `luma_samples=[${lumaSamples}] latency_ms=${Date.now() - startedAt}`
+            );
+            return {
+                ...frame,
+                source: 'temp_stream',
+                error: ''
+            };
+        }
+        return { dataUrl: '', source: 'temp_stream', width: 0, height: 0, bytes: 0, avgLuma: 0, error: 'empty_frame' };
+    } catch (error) {
+        const reason = String(error?.message || error || 'camera_capture_failed');
+        window.electronAPI?.log?.(`[ContextAssist] step=2 camera_capture source=temp_stream status=failed reason="${reason}"`);
+        return { dataUrl: '', source: 'temp_stream_failed', width: 0, height: 0, bytes: 0, avgLuma: 0, error: reason };
+    } finally {
+        try {
+            if (tempVideo) {
+                tempVideo.pause();
+                tempVideo.srcObject = null;
+            }
+        } catch {}
+        try {
+            if (stream) {
+                stream.getTracks().forEach((track) => track.stop());
+            }
+        } catch {}
+    }
+}
+
+function surfaceContextualAssistantAnswer(answerText, source = 'unknown') {
+    const text = String(answerText || '').trim();
+    if (!text) return;
+
+    // Always mute command routing briefly after assistant-spoken responses
+    // to prevent Deepgram feedback loops in every mode.
+    deepgramFeedbackMuteUntil = Date.now() + Math.max(3200, Math.min(text.length * 32, 10000));
+
+    captionRenderer.addFinalSegment({
+        transcript: `Relay: ${text}`,
+        words: [],
+        confidence: 0.98
+    });
+
+    if (appSettings.accessibilityMode === 'blind') {
+        blindMode.speak(text);
+    }
+
+    emitCommandExecution({
+        command: 'context_assist',
+        source,
+        normalized: canonicalizeCommandPhrase(normalizeSignPhrase(text)),
+        handled: true,
+        reason: 'context_assist',
+        routingStage: 'context_assist'
+    });
+}
+
+async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingMeta = {}) {
+    const prompt = String(rawPrompt || '').trim();
+    if (!prompt || !window.electronAPI?.contextAssist) return false;
+
+    const normalizedPrompt = canonicalizeCommandPhrase(normalizeSignPhrase(prompt));
+    if (!normalizedPrompt || shouldSkipContextualWakeFallback(normalizedPrompt)) {
+        return false;
+    }
+
+    const now = Date.now();
+    if (contextualWakeAssistState.inFlight) return true;
+    if (
+        contextualWakeAssistState.lastPrompt === normalizedPrompt &&
+        (now - contextualWakeAssistState.lastTs) < 2200
+    ) {
+        return true;
+    }
+
+    contextualWakeAssistState.inFlight = true;
+    contextualWakeAssistState.lastPrompt = normalizedPrompt;
+    contextualWakeAssistState.lastTs = now;
+    const startedAt = Date.now();
+    window.electronAPI?.log?.(
+        `[ContextAssist] step=1 route_start source=${source} prompt="${prompt}" normalized="${normalizedPrompt}"`
+    );
+    statusTextEl.innerText = 'Analyzing context...';
+
+    try {
+        const cameraFrame = await captureQuickCameraSnapshotDataUrl();
+        const cameraBytes = Number(cameraFrame?.bytes || 0);
+        window.electronAPI?.log?.(
+            `[ContextAssist] step=3 payload_prepare include_screen=true include_camera=true ` +
+            `camera_source=${cameraFrame?.source || 'none'} camera_bytes=${cameraBytes} ` +
+            `camera_luma=${Number(cameraFrame?.avgLuma || 0).toFixed(1)}`
+        );
+        const result = await window.electronAPI.contextAssist({
+            prompt,
+            includeScreen: true,
+            includeCamera: true,
+            cameraImageDataUrl: String(cameraFrame?.dataUrl || ''),
+            cameraMeta: {
+                source: cameraFrame?.source || 'none',
+                width: Number(cameraFrame?.width || 0),
+                height: Number(cameraFrame?.height || 0),
+                avgLuma: Number(cameraFrame?.avgLuma || 0),
+                bytes: cameraBytes,
+                error: cameraFrame?.error || ''
+            }
+        });
+        window.electronAPI?.log?.(
+            `[ContextAssist] step=4 main_response success=${result?.success === true} ` +
+            `used_screen=${result?.usedScreen === true} used_camera=${result?.usedCamera === true} ` +
+            `latency_ms=${Date.now() - startedAt} error="${String(result?.error || '')}"`
+        );
+        if (result?.debug) {
+            window.electronAPI?.log?.(
+                `[ContextAssist] step=5 debug screen_bytes=${Number(result.debug.screenBytes || 0)} ` +
+                `camera_bytes=${Number(result.debug.cameraBytes || 0)} ` +
+                `screen_detail=${String(result.debug.screenDetail || '')} ` +
+                `camera_detail=${String(result.debug.cameraDetail || '')} ` +
+                `api_latency_ms=${Number(result.debug.latencyMs || 0)}`
+            );
+            if (result.debug.screenImagePath || result.debug.cameraImagePath || result.debug.metaPath) {
+                window.electronAPI?.log?.(
+                    `[ContextAssist] step=6 capture_paths ` +
+                    `dir="${String(result.debug.captureDir || '')}" ` +
+                    `screen="${String(result.debug.screenImagePath || '')}" ` +
+                    `camera="${String(result.debug.cameraImagePath || '')}" ` +
+                    `meta="${String(result.debug.metaPath || '')}"`
+                );
+            }
+        }
+
+        if (result?.success && result?.answer) {
+            surfaceContextualAssistantAnswer(result.answer, source);
+            statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+            return true;
+        }
+
+        const failureReason = String(result?.error || 'context_assist_failed');
+        emitCommandExecution({
+            command: 'context_assist',
+            source,
+            normalized: normalizedPrompt,
+            handled: false,
+            reason: failureReason,
+            wakeMatched: routingMeta?.wakeMatched,
+            wakePhrase: routingMeta?.wakePhrase || '',
+            routingStage: 'context_assist'
+        });
+        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+        return false;
+    } catch (error) {
+        const failureReason = String(error?.message || 'context_assist_error');
+        emitCommandExecution({
+            command: 'context_assist',
+            source,
+            normalized: normalizedPrompt,
+            handled: false,
+            reason: failureReason,
+            wakeMatched: routingMeta?.wakeMatched,
+            wakePhrase: routingMeta?.wakePhrase || '',
+            routingStage: 'context_assist'
+        });
+        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+        return false;
+    } finally {
+        contextualWakeAssistState.inFlight = false;
+    }
 }
 
 function splitCommandCandidates(rawText, source = 'unknown') {
@@ -2962,12 +3254,15 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
     const queue = candidates.length > 0 ? candidates : [String(rawText || '').trim()];
 
     let handledAny = false;
+    let unmatchedWakePrompt = '';
+    let unmatchedWakeMeta = null;
     let wakeContinuationUnlocked = (
         WAKE_REQUIRED_SOURCES.has(source) &&
         wakeContinuationState.source === source &&
         Date.now() <= wakeContinuationState.expiresAt
     );
     queue.forEach((candidate) => {
+        let candidateHandled = false;
         let gate = gateCandidateForWakePhrase(candidate, source);
         if (
             !gate.allowed &&
@@ -3064,6 +3359,7 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
                     `[CommandRouter] compound-buffer source=${source} normalized="${gate.normalized}"`
                 );
                 handledAny = true;
+                candidateHandled = true;
                 return;
             }
             const routedPremium = maybeRoutePremiumAutomation(gate.raw, source, gate.normalized, {
@@ -3081,6 +3377,7 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
                     : null
             });
             handledAny = handledAny || routedPremium;
+            candidateHandled = candidateHandled || routedPremium;
             if (routedPremium) {
                 clearPendingPartialVoiceCommand();
                 clearWakeContinuation();
@@ -3094,6 +3391,7 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
                 `[CommandRouter] partial-buffer source=${source} command="${gate.normalized}"`
             );
             handledAny = true;
+            candidateHandled = true;
             return;
         }
 
@@ -3104,12 +3402,14 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
             wakePhrase: gate.wakePhrase
         });
         handledAny = handledAny || handled;
+        candidateHandled = candidateHandled || handled;
         if (!handled) {
             const routedPremium = maybeRoutePremiumAutomation(gate.raw, source, gate.normalized, {
                 wakeMatched: gate.wakeMatched,
                 wakePhrase: gate.wakePhrase
             });
             handledAny = handledAny || routedPremium;
+            candidateHandled = candidateHandled || routedPremium;
             if (routedPremium) {
                 clearPendingPartialVoiceCommand();
                 clearWakeContinuation();
@@ -3118,15 +3418,45 @@ function routeCommandInput(rawText, source = 'unknown', options = {}) {
             clearPendingPartialVoiceCommand();
             clearWakeContinuation();
         }
+
+        if (
+            !candidateHandled &&
+            gate.wakeMatched &&
+            WAKE_REQUIRED_SOURCES.has(source) &&
+            !shouldSkipContextualWakeFallback(gate.normalized)
+        ) {
+            const fallbackPrompt = String(gate.raw || candidate || '').trim();
+            if (fallbackPrompt && fallbackPrompt.length >= 8) {
+                if (!unmatchedWakePrompt || fallbackPrompt.length > unmatchedWakePrompt.length) {
+                    unmatchedWakePrompt = fallbackPrompt;
+                    unmatchedWakeMeta = {
+                        wakeMatched: gate.wakeMatched,
+                        wakePhrase: gate.wakePhrase
+                    };
+                }
+            }
+        }
     });
 
     if (!handledAny) {
         const gatedRaw = gateCandidateForWakePhrase(rawText, source);
         if (gatedRaw.allowed) {
-            maybeRoutePremiumAutomation(gatedRaw.raw, source, gatedRaw.normalized, {
+            const routedPremium = maybeRoutePremiumAutomation(gatedRaw.raw, source, gatedRaw.normalized, {
                 wakeMatched: gatedRaw.wakeMatched,
                 wakePhrase: gatedRaw.wakePhrase
             });
+            handledAny = handledAny || routedPremium;
+        }
+        if (
+            !handledAny &&
+            unmatchedWakePrompt &&
+            WAKE_REQUIRED_SOURCES.has(source)
+        ) {
+            void runContextualWakeFallback(unmatchedWakePrompt, source, unmatchedWakeMeta || {
+                wakeMatched: true,
+                wakePhrase: ''
+            });
+            handledAny = true;
         }
     }
     return handledAny;

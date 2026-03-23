@@ -90,7 +90,7 @@ export class AlertSystem {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            pointer-events: none;
+            pointer-events: auto;
             max-width: 400px;
         `;
     }

@@ -9,9 +9,11 @@ const btnStart = document.getElementById('btn-start');
 
 // Elements - Step 2 (Permissions)
 const micStatus = document.getElementById('mic-status');
+const cameraStatus = document.getElementById('camera-status');
 const screenStatus = document.getElementById('screen-status');
 const accessibilityStatus = document.getElementById('accessibility-status');
 const permMic = document.getElementById('perm-mic');
+const permCamera = document.getElementById('perm-camera');
 const permScreen = document.getElementById('perm-screen');
 const permAccessibility = document.getElementById('perm-accessibility');
 const btnTestPermissions = document.getElementById('btn-test-permissions');
@@ -47,9 +49,11 @@ let dataArray;
 let source;
 let mediaStream;
 let micGranted = false;
+let cameraGranted = false;
 let screenGranted = false;
 let deepgramConnected = false;
 let ttsConnected = false;
+let openSettingsTarget = 'screen-recording';
 
 // ============================================
 // STEP NAVIGATION
@@ -141,6 +145,25 @@ async function testMicrophone() {
     }
 }
 
+async function testCamera() {
+    setStatus(permCamera, cameraStatus, 'testing');
+
+    try {
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        cameraStream.getTracks().forEach((track) => track.stop());
+        setStatus(permCamera, cameraStatus, 'success');
+        cameraGranted = true;
+        return true;
+    } catch (e) {
+        window.electronAPI.log("Camera permission error: " + e);
+        setStatus(permCamera, cameraStatus, 'error');
+        cameraGranted = false;
+        openSettingsTarget = 'camera';
+        btnOpenSettings.style.display = 'block';
+        return false;
+    }
+}
+
 async function testScreenRecording() {
     setStatus(permScreen, screenStatus, 'testing');
 
@@ -159,6 +182,7 @@ async function testScreenRecording() {
         setStatus(permScreen, screenStatus, 'error');
         screenGranted = false;
         screenInstructions.style.display = 'block';
+        openSettingsTarget = 'screen-recording';
         btnOpenSettings.style.display = 'block';
         return false;
     }
@@ -188,12 +212,16 @@ btnTestPermissions.addEventListener('click', async () => {
     btnTestPermissions.disabled = true;
     btnTestPermissions.innerText = 'Testing...';
     permissionError.classList.remove('visible');
+    screenInstructions.style.display = 'none';
+    btnOpenSettings.style.display = 'none';
+    openSettingsTarget = 'screen-recording';
 
     const mic = await testMicrophone();
+    const camera = await testCamera();
     const screen = await testScreenRecording();
     await testAccessibility();
 
-    if (mic) {
+    if (mic && camera) {
         btnTestPermissions.innerText = 'Continue';
         btnTestPermissions.disabled = false;
 
@@ -208,25 +236,30 @@ btnTestPermissions.addEventListener('click', async () => {
             permissionError.classList.add('visible');
             permissionErrorText.innerText = 'Screen Recording permission is missing. You can still use microphone-only mode, or enable it in System Settings.';
         }
-    } else {
+    } else if (!mic) {
         btnTestPermissions.innerText = 'Retry';
         btnTestPermissions.disabled = false;
         permissionError.classList.add('visible');
         permissionErrorText.innerText = 'Microphone access is required for Relay to work. Please allow microphone access when prompted.';
+    } else {
+        btnTestPermissions.innerText = 'Retry';
+        btnTestPermissions.disabled = false;
+        permissionError.classList.add('visible');
+        permissionErrorText.innerText = 'Camera access is required for Relay gesture features. Please allow camera access when prompted.';
     }
 });
 
 btnOpenSettings.addEventListener('click', () => {
-    window.electronAPI.openSystemSettings();
+    window.electronAPI.openSystemSettings(openSettingsTarget);
 });
 
 skipScreen.addEventListener('click', () => {
-    if (micGranted) {
+    if (micGranted && cameraGranted) {
         goToStep(3);
         setTimeout(() => btnTestConnection.click(), 500);
     } else {
         permissionError.classList.add('visible');
-        permissionErrorText.innerText = 'Please test microphone permission first.';
+        permissionErrorText.innerText = 'Please test microphone and camera permissions first.';
     }
 });
 
@@ -347,12 +380,14 @@ btnLaunch.addEventListener('click', () => {
 btnRunSetupAgain.addEventListener('click', () => {
     // Reset state
     micGranted = false;
+    cameraGranted = false;
     screenGranted = false;
     deepgramConnected = false;
     ttsConnected = false;
 
     // Reset UI
     setStatus(permMic, micStatus, 'pending');
+    setStatus(permCamera, cameraStatus, 'pending');
     setStatus(permScreen, screenStatus, 'pending');
     setStatus(permAccessibility, accessibilityStatus, 'pending');
     setStatus(permDeepgram, deepgramStatus, 'pending');

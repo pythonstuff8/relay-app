@@ -25,6 +25,9 @@ const {
 // ML sound classifier – loads model in background on startup
 let soundClassifier = null;
 let openAIClient = null;
+const FAST_TEXT_MODEL = String(process.env.RELAY_FAST_TEXT_MODEL || 'gpt-4.1-nano').trim() || 'gpt-4.1-nano';
+const FAST_VISION_MODEL = String(process.env.RELAY_FAST_VISION_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini';
+const CONTEXT_CAPTURE_DIR_NAME = 'Relay Context Captures';
 const recentRecipients = [];
 let lastAutomationContext = {
     app: '',
@@ -156,6 +159,103 @@ function clampConfidence(value, fallback = 0.5) {
     const n = Number(value);
     if (!Number.isFinite(n)) return fallback;
     return Math.max(0, Math.min(1, n));
+}
+
+function estimateDataUrlBytes(dataUrl) {
+    const source = String(dataUrl || '');
+    const commaIndex = source.indexOf(',');
+    if (commaIndex < 0) return 0;
+    const b64 = source.slice(commaIndex + 1);
+    const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+    return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+function decodeImageDataUrl(dataUrl) {
+    const source = String(dataUrl || '').trim();
+    const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,([\s\S]+)$/i.exec(source);
+    if (!match) return null;
+    const subtype = String(match[1] || '').toLowerCase();
+    const base64Payload = String(match[2] || '');
+    if (!base64Payload) return null;
+    const buffer = Buffer.from(base64Payload, 'base64');
+    if (!buffer || buffer.length === 0) return null;
+    const extMap = {
+        'jpeg': 'jpg',
+        'jpg': 'jpg',
+        'png': 'png',
+        'webp': 'webp',
+        'gif': 'gif',
+        'bmp': 'bmp'
+    };
+    const ext = extMap[subtype] || 'img';
+    return { buffer, ext, subtype };
+}
+
+function sanitizeFileToken(value, maxLength = 48) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, maxLength) || 'capture';
+}
+
+function writeContextAssistCaptures({
+    prompt = '',
+    appName = '',
+    screenshotDataUrl = '',
+    cameraDataUrl = '',
+    cameraMeta = {}
+} = {}) {
+    const desktopDir = app.getPath('desktop');
+    const captureDir = path.join(desktopDir, CONTEXT_CAPTURE_DIR_NAME);
+    fs.mkdirSync(captureDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const promptToken = sanitizeFileToken(prompt, 40);
+    const captureId = `${timestamp}_${promptToken}`;
+    const saved = {
+        directory: captureDir,
+        captureId,
+        screenImagePath: '',
+        cameraImagePath: '',
+        metaPath: ''
+    };
+
+    const screenshotDecoded = decodeImageDataUrl(screenshotDataUrl);
+    if (screenshotDecoded) {
+        const filePath = path.join(captureDir, `${captureId}_screen.${screenshotDecoded.ext}`);
+        fs.writeFileSync(filePath, screenshotDecoded.buffer);
+        saved.screenImagePath = filePath;
+    }
+
+    const cameraDecoded = decodeImageDataUrl(cameraDataUrl);
+    if (cameraDecoded) {
+        const filePath = path.join(captureDir, `${captureId}_camera.${cameraDecoded.ext}`);
+        fs.writeFileSync(filePath, cameraDecoded.buffer);
+        saved.cameraImagePath = filePath;
+    }
+
+    const metaPath = path.join(captureDir, `${captureId}_meta.json`);
+    fs.writeFileSync(metaPath, JSON.stringify({
+        createdAt: new Date().toISOString(),
+        appName: String(appName || ''),
+        prompt: String(prompt || ''),
+        screenBytes: estimateDataUrlBytes(screenshotDataUrl),
+        cameraBytes: estimateDataUrlBytes(cameraDataUrl),
+        cameraMeta: {
+            source: String(cameraMeta?.source || ''),
+            width: Number(cameraMeta?.width || 0),
+            height: Number(cameraMeta?.height || 0),
+            avgLuma: Number(cameraMeta?.avgLuma || 0),
+            bytes: Number(cameraMeta?.bytes || 0),
+            error: String(cameraMeta?.error || '')
+        },
+        screenImagePath: saved.screenImagePath,
+        cameraImagePath: saved.cameraImagePath
+    }, null, 2));
+    saved.metaPath = metaPath;
+
+    return saved;
 }
 
 function escapeAppleScriptString(value) {
@@ -865,6 +965,7 @@ async function resolveVisionFallbackTarget(targetPhrase, activeAppName = 'Unknow
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         temperature: 0,
+        stream: false,
         max_tokens: 220,
         response_format: {
             type: 'json_schema',
@@ -925,6 +1026,7 @@ async function resolveVisionClickScript(targetPhrase, activeAppName = 'Unknown A
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         temperature: 0,
+        stream: false,
         max_tokens: 700,
         response_format: {
             type: 'json_schema',
@@ -1395,16 +1497,27 @@ async function performDesktopClickTarget(targetPhrase, options = {}) {
 }
 
 async function getPrimaryScreenScreenshotDataUrl() {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const displaySize = primaryDisplay?.size || { width: 1920, height: 1080 };
+    const scaleFactor = Math.max(1, Number(primaryDisplay?.scaleFactor || 1));
+    const captureWidth = Math.max(1280, Math.min(3840, Math.round(Number(displaySize.width || 1920) * scaleFactor)));
+    const captureHeight = Math.max(720, Math.min(2160, Math.round(Number(displaySize.height || 1080) * scaleFactor)));
+
     const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 1920, height: 1080 }
+        thumbnailSize: { width: captureWidth, height: captureHeight }
     });
 
-    if (!Array.isArray(sources) || sources.length === 0 || !sources[0]?.thumbnail) {
+    if (!Array.isArray(sources) || sources.length === 0) {
         throw new Error('No screen sources available. Enable Screen Recording permission.');
     }
 
-    return sources[0].thumbnail.toDataURL();
+    const primaryDisplayId = String(primaryDisplay?.id || '');
+    const selectedSource = sources.find((source) => String(source?.display_id || '') === primaryDisplayId) || sources[0];
+    if (!selectedSource?.thumbnail) {
+        throw new Error('No screen thumbnail available. Enable Screen Recording permission.');
+    }
+    return selectedSource.thumbnail.toDataURL();
 }
 
 async function getActiveAppNameSafe() {
@@ -1435,19 +1548,22 @@ async function analyzeImageWithOpenAI({
     const basePrompt = isScreenMode
         ? `Describe the full screen for accessibility use. Active app: "${appName}".`
         : 'Describe only the image content for accessibility use. Ignore app UI and overlays.';
+    const isBrief = detailLabel === 'brief' || detailLabel === 'low' || detailLabel === 'fast';
+    const imageDetail = isBrief ? 'low' : 'high';
 
     const instruction = [
         basePrompt,
         prompt ? `Focus: ${String(prompt).trim()}` : '',
-        detailLabel === 'brief'
+        isBrief
             ? 'Keep it brief (1-3 short sentences).'
             : 'Be specific and concise. Focus only on meaningful content.'
     ].filter(Boolean).join('\n');
 
     const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.1,
-        max_tokens: 380,
+        model: FAST_VISION_MODEL,
+        temperature: isBrief ? 0 : 0.1,
+        stream: false,
+        max_tokens: isBrief ? 220 : 380,
         response_format: {
             type: 'json_schema',
             json_schema: {
@@ -1472,7 +1588,7 @@ Do not mention the assistant or app itself in the description. Focus only on the
                 role: 'user',
                 content: [
                     { type: 'text', text: instruction },
-                    { type: 'image_url', image_url: { url: imageDataUrl } }
+                    { type: 'image_url', image_url: { url: imageDataUrl, detail: imageDetail } }
                 ]
             }
         ]
@@ -1742,6 +1858,7 @@ async function createDesktopAutomationPlan(payload = {}) {
                 openai.chat.completions.create({
                     model: candidateModel,
                     temperature: 0,
+                    stream: false,
                     max_tokens: 900,
                     response_format: {
                         type: 'json_schema',
@@ -1957,6 +2074,8 @@ let settingsWindow;
 let setupWindow;
 let transcriptWindow;
 let tray;
+const OVERLAY_BOTTOM_INSET = 10;
+let overlayPreExpandBounds = null;
 
 function getPrimaryWorkAreaBounds() {
     const display = screen.getPrimaryDisplay();
@@ -2005,6 +2124,19 @@ function clampOverlayHeightToWorkArea(requestedHeight, workArea = getPrimaryWork
     return Math.max(minHeight, Math.min(target, areaHeight));
 }
 
+function getOverlayBoundsForHeight(requestedHeight) {
+    const workArea = getPrimaryWorkAreaBounds();
+    const height = clampOverlayHeightToWorkArea(requestedHeight, workArea);
+    const maxY = workArea.y + workArea.height - height;
+    const y = Math.max(workArea.y, maxY - OVERLAY_BOTTOM_INSET);
+    return {
+        x: workArea.x,
+        y,
+        width: workArea.width,
+        height
+    };
+}
+
 function getAdaptiveOverlayHeight(mode = 'blind', workArea = getPrimaryWorkAreaBounds()) {
     const areaHeight = Math.max(240, Number(workArea?.height || 240));
     if (String(mode || '').toLowerCase() === 'blind') {
@@ -2018,15 +2150,7 @@ function getAdaptiveOverlayHeight(mode = 'blind', workArea = getPrimaryWorkAreaB
 
 function applyOverlayHeight(requestedHeight) {
     if (!overlayWindow || overlayWindow.isDestroyed()) return false;
-    const displayBounds = getPrimaryDisplayBounds();
-    const workArea = getPrimaryWorkAreaBounds();
-    const height = clampOverlayHeightToWorkArea(requestedHeight, workArea);
-    overlayWindow.setBounds({
-        x: displayBounds.x,
-        y: displayBounds.y + Math.max(0, displayBounds.height - height),
-        width: displayBounds.width,
-        height
-    });
+    overlayWindow.setBounds(getOverlayBoundsForHeight(requestedHeight));
     return true;
 }
 
@@ -2134,20 +2258,21 @@ function createOverlayWindow() {
     if (overlayWindow && !overlayWindow.isDestroyed()) {
         return overlayWindow;
     }
-    const displayBounds = getPrimaryDisplayBounds();
     const workArea = getPrimaryWorkAreaBounds();
-    const compactHeight = getAdaptiveOverlayHeight('blind', workArea);
+    const defaultHeight = getAdaptiveOverlayHeight('deaf', workArea);
+    const initialBounds = getOverlayBoundsForHeight(defaultHeight);
 
     overlayWindow = new BrowserWindow({
-        width: displayBounds.width,
-        height: compactHeight,
-        x: displayBounds.x,
-        y: displayBounds.y + Math.max(0, displayBounds.height - compactHeight),
+        width: initialBounds.width,
+        height: initialBounds.height,
+        x: initialBounds.x,
+        y: initialBounds.y,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
         hasShadow: false,
         resizable: false,
+        movable: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -2157,9 +2282,9 @@ function createOverlayWindow() {
 
     overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-    // Enable click-through on transparent areas by default.
-    // The renderer toggles this off when the mouse enters interactive elements.
-    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    // Keep overlay interactive on startup so toolbar drag works immediately.
+    // Renderer manages click-through transitions once loaded.
+    overlayWindow.setIgnoreMouseEvents(false);
 
     overlayWindow.loadFile(path.join(__dirname, '../renderer/overlay.html'));
     return overlayWindow;
@@ -2330,24 +2455,42 @@ ipcMain.on('minimize-app', () => {
 // Navigator panel expansion
 ipcMain.on('expand-overlay', () => {
     if (overlayWindow) {
-        const displayBounds = getPrimaryDisplayBounds();
+        if (!overlayPreExpandBounds) {
+            overlayPreExpandBounds = overlayWindow.getBounds();
+        }
+        const workArea = getPrimaryWorkAreaBounds();
         overlayWindow.setBounds({
-            x: displayBounds.x,
-            y: displayBounds.y,
-            width: displayBounds.width,
-            height: displayBounds.height
+            x: workArea.x,
+            y: workArea.y,
+            width: workArea.width,
+            height: workArea.height
         });
         overlayWindow.setAlwaysOnTop(true, 'floating');
-        overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+        overlayWindow.setIgnoreMouseEvents(false);
     }
 });
 
 ipcMain.on('collapse-overlay', () => {
     if (overlayWindow) {
-        const targetHeight = getAdaptiveOverlayHeight('blind');
-        applyOverlayHeight(targetHeight);
+        if (overlayPreExpandBounds) {
+            const workArea = getPrimaryWorkAreaBounds();
+            const previous = overlayPreExpandBounds;
+            overlayPreExpandBounds = null;
+            const height = clampOverlayHeightToWorkArea(previous.height, workArea);
+            const width = Math.max(480, Math.min(Number(previous.width || workArea.width), workArea.width));
+            const minX = workArea.x;
+            const maxX = workArea.x + workArea.width - width;
+            const minY = workArea.y;
+            const maxY = workArea.y + workArea.height - height;
+            const x = Math.max(minX, Math.min(Number(previous.x || minX), maxX));
+            const y = Math.max(minY, Math.min(Number(previous.y || minY), maxY));
+            overlayWindow.setBounds({ x, y, width, height });
+        } else {
+            const targetHeight = getAdaptiveOverlayHeight('blind');
+            applyOverlayHeight(targetHeight);
+        }
         overlayWindow.setAlwaysOnTop(true, 'floating');
-        overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+        overlayWindow.setIgnoreMouseEvents(false);
     }
 });
 
@@ -2378,8 +2521,10 @@ ipcMain.handle('ai-generate-guide', async (event, userQuery) => {
 - expectedApp examples: "Files", "Settings", "Terminal", "Firefox".`;
 
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            temperature: 0.3,
+            model: FAST_TEXT_MODEL,
+            temperature: 0.1,
+            stream: false,
+            max_tokens: 320,
             messages: [
                 {
                     role: 'system',
@@ -2819,6 +2964,7 @@ ipcMain.on('open-system-settings', (event, type) => {
             'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
             'accessibility': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
             'microphone': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+            'camera': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
             'bluetooth': 'x-apple.systempreferences:com.apple.preferences.Bluetooth',
             'sound': 'x-apple.systempreferences:com.apple.preference.sound',
             'notifications': 'x-apple.systempreferences:com.apple.preference.notifications',
@@ -2833,6 +2979,7 @@ ipcMain.on('open-system-settings', (event, type) => {
         const windowsTargets = {
             'accessibility': 'ms-settings:easeofaccess-display',
             'microphone': 'ms-settings:privacy-microphone',
+            'camera': 'ms-settings:privacy-webcam',
             'screen-recording': 'ms-settings:privacy-broadfilesystemaccess',
             'default': 'ms-settings:privacy'
         };
@@ -3095,8 +3242,7 @@ ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
 // TTS
 ipcMain.handle('tts-speak', async (event, text) => {
     try {
-        const OpenAI = require('openai');
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const openai = getOpenAIClient();
 
         const tempPath = path.join(os.tmpdir(), `relay_tts_${Date.now()}.mp3`);
 
@@ -3241,10 +3387,165 @@ ipcMain.handle('analyze-image', async (_event, imageData, options = {}) => {
     }
 });
 
+ipcMain.handle('context-assist', async (_event, payload = {}) => {
+    const startedAt = Date.now();
+    try {
+        const prompt = String(payload?.prompt || '').trim();
+        if (!prompt) {
+            return { success: false, error: 'Prompt is required' };
+        }
+
+        const includeScreen = payload?.includeScreen !== false;
+        const includeCamera = payload?.includeCamera !== false;
+        const cameraImageDataUrl = String(payload?.cameraImageDataUrl || '').trim();
+        const hasCameraImage = includeCamera && /^data:image\//i.test(cameraImageDataUrl);
+        const cameraMeta = payload?.cameraMeta && typeof payload.cameraMeta === 'object'
+            ? payload.cameraMeta
+            : {};
+        const cameraBytes = estimateDataUrlBytes(cameraImageDataUrl);
+        console.log(
+            `[ContextAssist] step=1 request_received prompt="${prompt}" include_screen=${includeScreen} include_camera=${includeCamera} ` +
+            `camera_present=${hasCameraImage} camera_bytes=${cameraBytes} camera_meta=${JSON.stringify({
+                source: String(cameraMeta?.source || ''),
+                width: Number(cameraMeta?.width || 0),
+                height: Number(cameraMeta?.height || 0),
+                avgLuma: Number(cameraMeta?.avgLuma || 0),
+                bytes: Number(cameraMeta?.bytes || 0),
+                error: String(cameraMeta?.error || '')
+            })}`
+        );
+        const promptLower = prompt.toLowerCase();
+        const cameraCentricPrompt = /(what am i holding|holding|hold|fingers|finger|hand|object|showing you|this item)/i.test(promptLower);
+        const screenCentricPrompt = /(error|dialog|popup|window|button|menu|screen|how do i|get out of)/i.test(promptLower);
+        const cameraImageDetail = cameraCentricPrompt ? 'high' : 'low';
+        const screenImageDetail = screenCentricPrompt ? 'high' : 'low';
+
+        const [appName, screenshot] = await Promise.all([
+            getActiveAppNameSafe(),
+            includeScreen
+                ? getPrimaryScreenScreenshotDataUrl().catch(() => '')
+                : Promise.resolve('')
+        ]);
+        const screenshotBytes = estimateDataUrlBytes(screenshot);
+        console.log(
+            `[ContextAssist] step=2 visual_assets_ready app="${appName}" screen_present=${Boolean(screenshot)} ` +
+            `screen_bytes=${screenshotBytes} camera_present=${hasCameraImage}`
+        );
+        let capturePaths = {
+            directory: '',
+            screenImagePath: '',
+            cameraImagePath: '',
+            metaPath: ''
+        };
+        try {
+            capturePaths = writeContextAssistCaptures({
+                prompt,
+                appName,
+                screenshotDataUrl: screenshot,
+                cameraDataUrl: cameraImageDataUrl,
+                cameraMeta
+            });
+            console.log(
+                `[ContextAssist] step=2b captures_saved dir="${capturePaths.directory}" ` +
+                `screen_path="${capturePaths.screenImagePath}" camera_path="${capturePaths.cameraImagePath}" ` +
+                `meta_path="${capturePaths.metaPath}"`
+            );
+        } catch (captureError) {
+            console.warn(`[ContextAssist] step=2b captures_save_failed error="${captureError?.message || captureError}"`);
+        }
+
+        const openai = getOpenAIClient();
+        const userContent = [
+            {
+                type: 'text',
+                text: [
+                    `User request: ${prompt}`,
+                    `Active app: ${appName}`,
+                    'Use the visuals to answer directly and practically.',
+                    'If asked about an object being held, prioritize camera evidence.',
+                    'If asked about an app error, prioritize screenshot evidence.',
+                    'Keep the answer short and direct.'
+                ].join('\n')
+            }
+        ];
+
+        if (screenshot) {
+            userContent.push({
+                type: 'text',
+                text: 'Image 1: This is the user\'s full computer screen screenshot.'
+            });
+            userContent.push({
+                type: 'image_url',
+                image_url: { url: screenshot, detail: screenImageDetail }
+            });
+        }
+        if (hasCameraImage) {
+            userContent.push({
+                type: 'text',
+                text: 'Image 2: This is the user\'s camera image.'
+            });
+            userContent.push({
+                type: 'image_url',
+                image_url: { url: cameraImageDataUrl, detail: cameraImageDetail }
+            });
+        }
+        console.log(
+            `[ContextAssist] step=3 openai_request model=${FAST_VISION_MODEL} images=${(screenshot ? 1 : 0) + (hasCameraImage ? 1 : 0)} ` +
+            `screen_detail=${screenImageDetail} camera_detail=${cameraImageDetail}`
+        );
+
+        const response = await openai.chat.completions.create({
+            model: FAST_VISION_MODEL,
+            temperature: 0,
+            stream: false,
+            max_tokens: 170,
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are Relay, an accessibility assistant.
+Answer the user using the provided screen and camera context.
+Be concise and action-oriented.
+Prefer one short sentence, at most two.
+Do not mention hidden system internals.
+If visual evidence is insufficient, say exactly what is missing in one short sentence.`
+                },
+                { role: 'user', content: userContent }
+            ]
+        });
+
+        const answer = String(response?.choices?.[0]?.message?.content || '').trim();
+        const elapsedMs = Date.now() - startedAt;
+        console.log(
+            `[ContextAssist] step=4 openai_response success=true latency_ms=${elapsedMs} answer_chars=${answer.length}`
+        );
+        return {
+            success: true,
+            answer: answer || 'I could not infer enough from the current screen and camera view.',
+            appName,
+            usedScreen: Boolean(screenshot),
+            usedCamera: Boolean(hasCameraImage),
+            debug: {
+                latencyMs: elapsedMs,
+                screenBytes: screenshotBytes,
+                cameraBytes,
+                screenDetail: screenImageDetail,
+                cameraDetail: cameraImageDetail,
+                captureDir: capturePaths.directory,
+                screenImagePath: capturePaths.screenImagePath,
+                cameraImagePath: capturePaths.cameraImagePath,
+                metaPath: capturePaths.metaPath
+            }
+        };
+    } catch (error) {
+        console.error('[Context Assist] Error:', error.message);
+        console.error(`[ContextAssist] step=error latency_ms=${Date.now() - startedAt} message="${error?.message || error}"`);
+        return { success: false, error: error.message };
+    }
+});
+
 ipcMain.handle('ask-follow-up', async (event, question, conversationHistory) => {
     try {
-        const OpenAI = require('openai');
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const openai = getOpenAIClient();
 
         const messages = [
             {
@@ -3256,9 +3557,11 @@ ipcMain.handle('ask-follow-up', async (event, question, conversationHistory) => 
         ];
 
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: FAST_TEXT_MODEL,
+            temperature: 0.1,
+            stream: false,
             messages,
-            max_tokens: 300
+            max_tokens: 220
         });
 
         return { success: true, answer: response.choices[0].message.content };
@@ -3273,12 +3576,12 @@ ipcMain.handle('ask-follow-up', async (event, question, conversationHistory) => 
 
 ipcMain.handle('execute-command', async (event, query) => {
     try {
-        const OpenAI = require('openai');
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const openai = getOpenAIClient();
 
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: FAST_TEXT_MODEL,
             temperature: 0,
+            stream: false,
             messages: [
                 {
                     role: 'system',
@@ -3300,7 +3603,7 @@ Return ONLY valid JSON: {"action": "action-name", "params": {}}`
                 },
                 { role: 'user', content: query }
             ],
-            max_tokens: 100
+            max_tokens: 80
         });
 
         const content = response.choices[0].message.content;
@@ -3319,11 +3622,12 @@ Return ONLY valid JSON: {"action": "action-name", "params": {}}`
 
 ipcMain.handle('generate-meeting-summary', async (event, data) => {
     try {
-        const OpenAI = require('openai');
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const openai = getOpenAIClient();
 
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4o-mini',
+            temperature: 0.1,
+            stream: false,
             messages: [
                 {
                     role: 'system',

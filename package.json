@@ -8,6 +8,7 @@
     "start": "electron .",
     "build": "electron-builder --mac --win --linux",
     "build:mac": "electron-builder --mac",
+    "build:mac:signed": "/bin/zsh -lc 'set -a; source .env; set +a; electron-builder --mac'",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "verify:voice-commands": "node scripts/verify-voice-commands.js",
@@ -35,6 +36,12 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
     "mac": {
       "artifactName": "Relay-mac-${arch}.${ext}",
       "target": [
@@ -48,7 +55,9 @@
       ],
       "icon": "assets/icons/icon.png",
       "category": "public.app-category.utilities",
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Relay needs microphone access for real-time speech captioning.",
         "NSScreenCaptureUsageDescription": "Relay needs screen capture for system audio and screen explanation features."
