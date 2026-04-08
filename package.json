@@ -19,7 +19,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "Suhaan Basra",
+  "author": "Suhaan Thayyil",
   "license": "ISC",
   "type": "commonjs",
   "build": {
