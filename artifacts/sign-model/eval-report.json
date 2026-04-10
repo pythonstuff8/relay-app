@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0-local-ml",
+  "generated_at": "2026-03-19T20:52:54.658Z",
+  "dataset_path": "/Users/suhaan/Documents/Coding/tsa/relay/data/sign/processed/dataset.json",
+  "model_path": "/Users/suhaan/Documents/Coding/tsa/relay/artifacts/sign-model/distilled-model.json",
+  "samples_evaluated": 168,
+  "core": {
+    "samples": 74,
+    "top1_accuracy": 0.06756756756756757,
+    "top1_accuracy_pct": 6.76,
+    "top5_accuracy": 0.43243243243243246,
+    "top5_accuracy_pct": 43.24
+  },
+  "fingerspelling": {
+    "samples": 94,
+    "cer": 0.9255,
+    "wer": 0.9255
+  },
+  "oov": {
+    "samples": 0,
+    "recovered": 0,
+    "recovery_rate": 0,
+    "recovery_rate_pct": 0
+  },
+  "performance": {
+    "word_inference_ms_median": 0.013,
+    "fingerspell_inference_ms_median": 0.004,
+    "end_to_end_token_ms_median": 5.204,
+    "word_inference_ms_avg": 0.028,
+    "fingerspell_inference_ms_avg": 0.006
+  }
+}

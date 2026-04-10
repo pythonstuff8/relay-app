@@ -9,6 +9,7 @@ export class ScreenExplainer {
         this.lastExplanation = null;
         this.conversationHistory = [];
         this.panel = null;
+        this.currentAudio = null;
         this._createPanel();
     }
 
@@ -87,6 +88,15 @@ export class ScreenExplainer {
                 this.lastExplanation = result.explanation;
                 this.conversationHistory = [{ role: 'assistant', content: result.explanation }];
                 this._showResult(result.explanation);
+                
+                // Automatically speak the explanation
+                window.electronAPI.ttsSpeak(result.explanation).then(ttsRes => {
+                    if (ttsRes.success && ttsRes.path) {
+                        if (this.currentAudio) this.currentAudio.pause();
+                        this.currentAudio = new Audio(`file://${ttsRes.path}`);
+                        this.currentAudio.play().catch(e => console.error('[TTS Playback]', e));
+                    }
+                });
             } else {
                 this._showError(result.error || 'Failed to analyze screen');
             }
@@ -110,6 +120,15 @@ export class ScreenExplainer {
                 this.conversationHistory.push({ role: 'user', content: question });
                 this.conversationHistory.push({ role: 'assistant', content: result.answer });
                 this._appendAssistantMessage(result.answer);
+                
+                // Automatically speak the follow-up
+                window.electronAPI.ttsSpeak(result.answer).then(ttsRes => {
+                    if (ttsRes.success && ttsRes.path) {
+                        if (this.currentAudio) this.currentAudio.pause();
+                        this.currentAudio = new Audio(`file://${ttsRes.path}`);
+                        this.currentAudio.play().catch(e => console.error('[TTS Playback]', e));
+                    }
+                });
             } else {
                 this._appendAssistantMessage('Sorry, I couldn\'t process that question.');
             }
@@ -178,6 +197,10 @@ export class ScreenExplainer {
     }
 
     hide() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio = null;
+        }
         this.panel.style.opacity = '0';
         this.panel.style.transform = 'translate(-50%, -50%) scale(0.95)';
         this.isVisible = false;

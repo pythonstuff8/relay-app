@@ -12,7 +12,9 @@ const envPath = app.isPackaged
 require('dotenv').config({ path: envPath });
 
 // Import new modules
+const WebSocket = require('ws');
 const settings = require('./settings-manager');
+
 const { registerShortcuts, unregisterAll } = require('./shortcut-manager');
 const haptics = require('./haptic-manager');
 const { SoundClassifier } = require('./sound-classifier');
@@ -1545,9 +1547,10 @@ async function analyzeImageWithOpenAI({
     const detailLabel = String(detail || 'high').toLowerCase();
     const isScreenMode = modeLabel !== 'image';
 
+    const activeLang = settings.get('language') || 'en-US';
     const basePrompt = isScreenMode
-        ? `Describe the full screen for accessibility use. Active app: "${appName}".`
-        : 'Describe only the image content for accessibility use. Ignore app UI and overlays.';
+        ? `Describe the full screen for accessibility use. Active app: "${appName}". You MUST respond completely in the language corresponding to this ISO tag: ${activeLang}.`
+        : `Describe only the image content for accessibility use. Ignore app UI and overlays. You MUST respond completely in the language corresponding to this ISO tag: ${activeLang}.`;
     const isBrief = detailLabel === 'brief' || detailLabel === 'low' || detailLabel === 'fast';
     const imageDetail = isBrief ? 'low' : 'high';
 
@@ -2126,14 +2129,11 @@ function clampOverlayHeightToWorkArea(requestedHeight, workArea = getPrimaryWork
 
 function getOverlayBoundsForHeight(requestedHeight) {
     const workArea = getPrimaryWorkAreaBounds();
-    const height = clampOverlayHeightToWorkArea(requestedHeight, workArea);
-    const maxY = workArea.y + workArea.height - height;
-    const y = Math.max(workArea.y, maxY - OVERLAY_BOTTOM_INSET);
     return {
         x: workArea.x,
-        y,
+        y: workArea.y,
         width: workArea.width,
-        height
+        height: workArea.height
     };
 }
 
@@ -2337,7 +2337,65 @@ function createTranscriptWindow() {
     });
 }
 
+// Global WebSocket Server instance
+let wss = null;
+let connectedMobiles = new Set();
+
 app.whenReady().then(() => {
+    // Start WebSocket Server for Mobile Middleware connection
+    try {
+        wss = new WebSocket.Server({ port: 8080 });
+        const os = require('os');
+        const nets = os.networkInterfaces();
+        let localIP = 'unknown';
+        for (const name of Object.keys(nets)) {
+            for (const net of nets[name]) {
+                if (net.family === 'IPv4' && !net.internal) {
+                    localIP = net.address;
+                    break;
+                }
+            }
+            if (localIP !== 'unknown') break;
+        }
+        console.log(`[WS Server] Running on ws://${localIP}:8080`);
+        
+        wss.on('connection', (ws) => {
+            console.log('[WS Server] Mobile client connected');
+            connectedMobiles.add(ws);
+            
+            // Send welcome so mobile confirms link
+            ws.send(JSON.stringify({ type: 'WELCOME', ip: localIP, app: 'Relay Mac' }));
+            
+            ws.on('message', (msg) => {
+                try {
+                    const data = JSON.parse(msg);
+                    if (data.type === 'PING') {
+                        ws.send(JSON.stringify({ type: 'PONG' }));
+                    }
+                } catch (e) {}
+            });
+            
+            ws.on('close', () => {
+                console.log('[WS Server] Mobile client disconnected');
+                connectedMobiles.delete(ws);
+            });
+        });
+    } catch (e) {
+        console.error('[WS Server] Failed to start', e);
+    }
+
+    // Expose IPC for broadcasting alerts to phones
+    ipcMain.handle('broadcast-alert', async (event, payload) => {
+        if (!wss) return;
+        const msg = JSON.stringify({ type: 'ALERT', ...payload });
+        for (const client of connectedMobiles) {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(msg);
+            }
+        }
+    });
+
+
     // Grant microphone permission automatically for this app
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media') {
@@ -2914,7 +2972,7 @@ ipcMain.handle('test-deepgram', async () => {
             return { success: false, error: 'DEEPGRAM_API_KEY is not configured' };
         }
         const connection = deepgram.listen.live({
-            model: 'nova-3',
+            model: 'nova-2',
             language: 'en-US',
             encoding: 'linear16',
             sample_rate: 16000,
@@ -3043,7 +3101,7 @@ async function startDeepgramStream() {
 
     return new Promise((resolve) => {
         try {
-            console.log('[Deepgram] Starting Nova-3 streaming connection...');
+            console.log('[Deepgram] Starting Nova-2 streaming connection...');
 
             const connectionTimeout = setTimeout(() => {
                 console.error('[Deepgram] Connection timeout');
@@ -3052,7 +3110,7 @@ async function startDeepgramStream() {
             }, 10000);
 
             deepgramConnection = deepgram.listen.live({
-                model: 'nova-3',
+                model: 'nova-2',
                 language: settings.get('language') || 'en-US',
                 smart_format: true,
                 punctuate: true,
@@ -3211,16 +3269,14 @@ ipcMain.handle('classifier-status', () => {
 });
 
 ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
+    const wavBuffer = float32ToWav(audioBuffer, 16000);
     try {
-        if (!hasDeepgramKeyConfigured() || !deepgram) {
-            return { success: false, error: 'DEEPGRAM_API_KEY is not configured' };
-        }
-        const wavBuffer = float32ToWav(audioBuffer, 16000);
+        if (!hasDeepgramKeyConfigured() || !deepgram) throw new Error('DEEPGRAM_API_KEY is not configured');
 
         const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
             wavBuffer,
             {
-                model: 'nova-3',
+                model: 'nova-2',
                 smart_format: true,
                 language: 'en',
                 punctuate: true,
@@ -3230,12 +3286,27 @@ ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
         );
 
         if (error) throw error;
-
         const text = result.results?.channels[0]?.alternatives[0]?.transcript;
         return { success: true, text: text };
     } catch (error) {
-        console.error('[Deepgram] Transcription Exception:', error);
-        return { success: false, error: error.message || "Unknown Error" };
+        console.warn('[Fallback] Deepgram failed, routing to OpenAI Transcribe...', error.message);
+        try {
+            const openai = getOpenAIClient();
+            const tempPath = path.join(os.tmpdir(), `relay_transcribe_${Date.now()}.wav`);
+            fs.writeFileSync(tempPath, wavBuffer);
+            
+            const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(tempPath),
+                model: 'gpt-4o-mini-transcribe',
+                language: 'en'
+            });
+            fs.unlinkSync(tempPath);
+            
+            return { success: true, text: transcription.text };
+        } catch (fallbackErr) {
+            console.error('[OpenAI Transcribe Failed]', fallbackErr);
+            return { success: false, error: fallbackErr.message || "Unknown Error" };
+        }
     }
 });
 

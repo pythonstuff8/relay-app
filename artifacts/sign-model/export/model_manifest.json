@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0-local-ml",
+  "generated_at": "2026-03-19T20:52:54.679Z",
+  "model_profile": "balanced_realtime",
+  "vocab_tier": "core_conversation_plus_fingerspell",
+  "feature_schema": {
+    "frame_dim": 13,
+    "temporal_window": 24,
+    "fingerspell_frame_dim": 8,
+    "use_holistic_experiment": false
+  },
+  "thresholds": {
+    "sign_min_confidence": 0.66,
+    "cloud_fallback_threshold": 0.76,
+    "fingerspell_min_confidence": 0.56,
+    "duplicate_cooldown_ms": 1100,
+    "phrase_idle_flush_ms": 900
+  },
+  "stability_frames": 3,
+  "latency_targets_ms": {
+    "per_frame_inference": 8,
+    "end_to_end_token": 120
+  },
+  "word_model": {
+    "path": "./assets/sign-word-model.json",
+    "label_count": 22
+  },
+  "fingerspell_model": {
+    "path": "./assets/fingerspell-model.json",
+    "label_count": 26
+  },
+  "evaluation_summary": {
+    "core_top1_accuracy_pct": 6.76,
+    "core_top5_accuracy_pct": 43.24,
+    "fingerspelling_cer": 0.9255,
+    "fingerspelling_wer": 0.9255,
+    "oov_recovery_rate_pct": 0,
+    "word_inference_ms_median": 0.013,
+    "end_to_end_token_ms_median": 5.204
+  }
+}

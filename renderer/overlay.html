@@ -377,7 +377,8 @@
             overflow: hidden;
         }
 
-        body[data-accessibility-mode="deaf"] .caption-content {
+        body[data-accessibility-mode="deaf"] .caption-content,
+        body[data-accessibility-mode="blind"] .caption-content {
             max-height: none;
         }
 
@@ -1324,6 +1325,7 @@
                     </div>
                     <div class="toolbar-right">
                         <canvas id="visualizer" aria-hidden="true" role="img" aria-label="Audio Visualizer"></canvas>
+
                         <button class="tool-btn" id="gesture-widget-toggle" title="Close Sign Widget" aria-label="Close Sign Widget">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M10 11.5V7a2 2 0 1 1 4 0v4.5"/>

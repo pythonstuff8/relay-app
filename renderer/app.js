@@ -1133,7 +1133,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             } else {
                 statusTextEl.innerText = 'No active meeting';
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                 }, 1400);
                 speakBlindConfirmation('No active meeting', 'meeting-summary-empty', 1000);
             }
@@ -1145,7 +1145,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             meetingMode.updateBadge();
             statusTextEl.innerText = isActive ? 'Meeting mode active' : 'Meeting mode ended';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
             }, 1400);
             maybeSpeakActionCompletion('meeting-toggle', { source, extra: isActive ? 'Meeting mode active' : 'Meeting mode ended' });
             break;
@@ -1165,7 +1165,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             try { commandBar.hide?.(); } catch (e) {}
             statusTextEl.innerText = 'Stopped';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
             }, 1200);
             maybeSpeakActionCompletion('stop-all', { source });
             break;
@@ -1190,7 +1190,7 @@ window.addEventListener('command-executed', (event) => {
     if (detail.success) {
         statusTextEl.innerText = `Command: ${command}`;
         setTimeout(() => {
-            statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+            statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
         }, 1400);
     }
 });
@@ -1283,7 +1283,7 @@ function setupDeepgramListeners() {
                     }
                 }
 
-                statusTextEl.innerText = "Listening (Deepgram Nova-3)";
+                statusTextEl.innerText = "Listening (Deepgram Nova-2)";
             } else {
                 captionRenderer.setInterim(result);
                 statusTextEl.innerText = "Transcribing...";
@@ -1296,7 +1296,7 @@ function setupDeepgramListeners() {
     window.electronAPI.onDeepgramStatus((status) => {
         if (status.connected) {
             isDeepgramStreaming = true;
-            statusTextEl.innerText = "Connected (Deepgram Nova-3)";
+            statusTextEl.innerText = "Connected (Deepgram Nova-2)";
             dotEl.classList.add('active');
         } else {
             isDeepgramStreaming = false;
@@ -1427,8 +1427,18 @@ async function startRecording(sourceId = 'mic') {
             const type = event.category === 'emergency' ? 'danger' : 'warning';
             alertOverlay.className = type + " active";
             if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            
+            // Broadcast to connected Mobile Apps
+            if (window.electronAPI && window.electronAPI.broadcastAlert) {
+                window.electronAPI.broadcastAlert({
+                    message: event.label,
+                    severity: event.category === 'emergency' ? 'high' : 'normal'
+                }).catch(e => console.error("Broadcast failed:", e));
+            }
+
             setTimeout(() => { alertOverlay.className = ""; }, 2000);
         });
+
         // Use mono path for microphone capture; reserve stereo path for desktop/system capture.
         const preferStereoDetection = sourceId !== 'mic';
         soundDetector.connect(source, preferStereoDetection);
@@ -1642,15 +1652,16 @@ window.addEventListener('mode-changed', (e) => {
             blindMode.activate();
             setBlindModeMinimalControls(true);
             applyGestureWidgetForCurrentMode();
-            if (transcriptBtn) transcriptBtn.style.display = 'none';
+            if (transcriptBtn) transcriptBtn.style.display = '';
+            // Keep transcript button available in blind mode for quick screenshots/demos.
             // Deactivate tone captioning (not needed for blind)
             toneCaptioning.deactivate();
-            // Keep toolbar/settings UI visible in blind mode, but hide transcript captions.
+            // Keep subtitles visible in blind mode so captions remain available for demos/screenshots.
             captionBar.style.display = 'flex';
             captionBar.style.opacity = '1';
             if (transcriptEl) {
-                transcriptEl.style.display = 'none';
-                transcriptEl.setAttribute('aria-hidden', 'true');
+                transcriptEl.style.display = '';
+                transcriptEl.setAttribute('aria-hidden', 'false');
             }
             break;
     }
@@ -2331,7 +2342,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
 
         if (result?.success && result?.answer) {
             surfaceContextualAssistantAnswer(result.answer, source);
-            statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+            statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
             return true;
         }
 
@@ -2346,7 +2357,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
             wakePhrase: routingMeta?.wakePhrase || '',
             routingStage: 'context_assist'
         });
-        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
         return false;
     } catch (error) {
         const failureReason = String(error?.message || 'context_assist_error');
@@ -2360,7 +2371,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
             wakePhrase: routingMeta?.wakePhrase || '',
             routingStage: 'context_assist'
         });
-        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
         return false;
     } finally {
         contextualWakeAssistState.inFlight = false;
@@ -2558,7 +2569,7 @@ function announceAutomationMessage(message) {
         blindMode.speak(text);
     }
     setTimeout(() => {
-        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
     }, 1800);
 }
 
@@ -2857,7 +2868,7 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                 if (success) {
                     statusTextEl.innerText = 'Pressed key';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                     }, 1200);
                 }
             })
@@ -2922,23 +2933,23 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                     });
                     statusTextEl.innerText = 'Typed text';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                     }, 1200);
                 } else if (response?.permissionRequired) {
                     statusTextEl.innerText = 'Desktop typing unavailable';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                     }, 1600);
                 } else if (response?.reason === 'type_timeout') {
                     blindMode.speak('Typing timed out. I could not control the target app.');
                     statusTextEl.innerText = 'Typing timed out';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                     }, 1600);
                 } else if (response?.reason === 'no_focused_target') {
                     statusTextEl.innerText = 'Focus a text field, then try again';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                     }, 1600);
                 }
             })
@@ -3000,12 +3011,12 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                 });
                 statusTextEl.innerText = `Focused ${appLabel}`;
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                 }, 1400);
             } else if (response?.permissionRequired) {
                 statusTextEl.innerText = 'Desktop control unavailable';
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
                 }, 1600);
             }
         })
@@ -3077,7 +3088,7 @@ function handleCommandPhrase(rawText, {
         if (source === 'deepgram' || source === 'speech-recognition') {
             statusTextEl.innerText = 'Say "navigate to", "click on", "press ...", or "type ..."';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
             }, 1600);
         }
         return false;
@@ -3657,6 +3668,7 @@ window.__relayCommandRouterReady = true;
         modeIndicator.style.display = 'flex';
     }
 
+
     // Initialize mode from settings and sync the mode switcher state.
     const savedMode = ['deaf', 'blind'].includes(appSettings.accessibilityMode)
         ? appSettings.accessibilityMode
@@ -3673,7 +3685,7 @@ window.__relayCommandRouterReady = true;
     }));
 
     // Auto-start
-    window.electronAPI.log("Starting Relay with Deepgram Nova-3 streaming...");
+    window.electronAPI.log("Starting Relay with Deepgram Nova-2 streaming...");
     startRecording('mic');
     refreshSources();
 })();

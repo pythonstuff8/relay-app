@@ -25,8 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     desktopClickTarget: (targetPhrase) => ipcRenderer.invoke('desktop-click-target', targetPhrase),
     desktopTypeText: (payload) => ipcRenderer.invoke('desktop-type-text', payload),
     desktopPressKey: (payload) => ipcRenderer.invoke('desktop-press-key', payload),
-    desktopAutomationPlan: (payload) => ipcRenderer.invoke('desktop-automation-plan', payload),
-    desktopAutomationExecute: (plan) => ipcRenderer.invoke('desktop-automation-execute', plan),
+    runPremiumAutomationPlan: (plan) => ipcRenderer.invoke('run-premium-automation-plan', plan),
+    runStandardAutomationFlow: (prompt, parsed) => ipcRenderer.invoke('run-standard-automation-flow', prompt, parsed),
+    broadcastAlert: (data) => ipcRenderer.invoke('broadcast-alert', data),
     desktopAutomationStatus: () => ipcRenderer.invoke('desktop-automation-status'),
     onAutomationPreflight: (callback) => ipcRenderer.on('automation-preflight', (_event, status) => callback(status)),
 

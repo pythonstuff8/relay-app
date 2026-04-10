@@ -123,7 +123,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^40.0.0",
+    "electron": "^40.8.5",
     "electron-builder": "^26.4.0"
   },
   "dependencies": {
@@ -137,6 +137,7 @@
     "electron-store": "^8.2.0",
     "openai": "^6.16.0",
     "three": "^0.160.1",
-    "wavefile": "^11.0.0"
+    "wavefile": "^11.0.0",
+    "ws": "^8.20.0"
   }
 }
