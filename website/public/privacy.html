@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy | Relay</title>
+  <meta name="description" content="How the Relay desktop and mobile apps handle audio, camera images, and other data." />
+  <link rel="canonical" href="https://relay.suhaanthayyil.com/privacy" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+  <link rel="stylesheet" href="/legal.css" />
+</head>
+<body>
+  <header>
+    <img src="/icons/apple-touch-icon.png" alt="" />
+    <a href="/">Relay</a>
+  </header>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective October 3, 2026. Applies to the Relay desktop app (macOS, Windows, Linux) and the Relay mobile app (iOS, Android).</p>
+
+    <div class="card">
+      <strong>The short version.</strong> Relay has no accounts, no ads, no analytics, and no tracking.
+      Audio and camera images leave your device only when you use a feature that needs AI processing,
+      and only to the processors listed below. Relay does not store your audio, images, or transcripts on its servers.
+    </div>
+
+    <h2>What stays on your device</h2>
+    <ul>
+      <li>Your settings, language choice, saved phrases, and phone pairing code.</li>
+      <li>Transcripts and meeting notes saved in the desktop app.</li>
+      <li>Braille input and reader, Quick Phrases, and Loud Sound Alerts, which run fully offline.</li>
+      <li>On-device sound classification in the desktop app.</li>
+    </ul>
+
+    <h2>What is sent for processing, and when</h2>
+    <ul>
+      <li><strong>Microphone audio</strong> is streamed to <a href="https://deepgram.com/privacy" target="_blank" rel="noopener">Deepgram</a>
+        for speech-to-text only while captions are on, or while you hold the talk button in Blind Mode.
+        Relay asks Deepgram not to use this audio to improve its models.</li>
+      <li><strong>Camera images and screenshots</strong> are sent to <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI</a>
+        only when you ask for help, for example Blind Mode guidance, Read Aloud, or Explain Screen.</li>
+      <li><strong>Text</strong> such as your spoken question, a caption you choose to translate, or text to be read aloud in another
+        language is sent to OpenAI to produce the answer, translation, or voice.</li>
+    </ul>
+    <p>These requests go through the Relay API at relay.suhaanthayyil.com, which forwards them to the processor and returns the result.
+      The Relay API does not save request content. Like any web server, our host (Vercel) keeps short-lived request logs,
+      including IP addresses, for security and rate limiting.
+      OpenAI does not use API data to train its models and may keep it for up to 30 days for abuse monitoring.</p>
+
+    <h2>Connecting your phone to your computer</h2>
+    <p>When you pair the mobile app with the desktop app, they talk directly over your local network using a pairing code.
+      Remote Mic audio goes from your phone to your own computer, which then captions it as described above.
+      Sound alerts and captions go from your computer to your phone. None of this passes through Relay's servers.</p>
+
+    <h2>Permissions</h2>
+    <ul>
+      <li><strong>Microphone:</strong> live captions, voice questions, Remote Mic, and Loud Sound Alerts.</li>
+      <li><strong>Camera:</strong> Blind Mode scene guidance, Read Aloud, scanning the pairing QR code, and desktop gesture input.</li>
+      <li><strong>Local network:</strong> finding and talking to the Relay desktop app on your Wi-Fi.</li>
+      <li><strong>Screen recording (desktop):</strong> system-audio captions and Explain Screen.</li>
+    </ul>
+    <p>You can turn any permission off in your device settings. Features that need it will stop working until you turn it back on.</p>
+
+    <h2>What we do not do</h2>
+    <ul>
+      <li>We do not sell or share your data for advertising.</li>
+      <li>We do not build profiles or track you across apps or websites.</li>
+      <li>We do not require an account, email, or phone number.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>Relay is a general audience accessibility tool and is not directed at children under 13. We do not knowingly collect personal information from children.</p>
+
+    <h2>Deleting your data</h2>
+    <p>Because Relay does not keep your content on its servers, there is nothing to delete on our side.
+      To remove everything stored locally, uninstall the app or use Reset in the app settings.</p>
+
+    <h2>Changes and contact</h2>
+    <p>If this policy changes, we will update this page and the effective date above.
+      Questions? Open an issue on <a href="https://github.com/pythonstuff8/relay-app/issues" target="_blank" rel="noopener">GitHub</a>
+      or see the <a href="/support">Support page</a>.</p>
+  </main>
+  <footer>
+    <span>&copy; 2026 Relay</span>
+    <a href="/">Home</a>
+    <a href="/support">Support</a>
+    <a href="/terms">Terms</a>
+  </footer>
+</body>
+</html>
