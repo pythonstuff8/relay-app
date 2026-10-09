@@ -44,3 +44,5 @@ app-example
 
 # local env (no secrets belong here; the app uses the Relay API proxy)
 .env
+
+build-artifacts/
