@@ -1,18 +1,21 @@
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, session, desktopCapturer, shell, dialog } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, session, desktopCapturer, shell, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 
-// Load environment variables from .env
-// In packaged builds the .env lives in resources/, in dev it is at project root.
-const envPath = app.isPackaged
-    ? path.join(process.resourcesPath, '.env')
-    : path.join(__dirname, '../.env');
-require('dotenv').config({ path: envPath });
+// Local development may use provider keys from ../.env. Packaged builds ship
+// without secrets and reach AI services through the Relay API proxy.
+if (!app.isPackaged) {
+    try {
+        require('dotenv').config({ path: path.join(__dirname, '../.env') });
+    } catch {
+        // dotenv is a dev dependency; ignore when unavailable.
+    }
+}
 
 // Import new modules
-const WebSocket = require('ws');
+const { MobileBridge } = require('./mobile-bridge');
 const settings = require('./settings-manager');
 
 const { registerShortcuts, unregisterAll } = require('./shortcut-manager');
@@ -26,7 +29,6 @@ const {
 
 // ML sound classifier – loads model in background on startup
 let soundClassifier = null;
-let openAIClient = null;
 const FAST_TEXT_MODEL = String(process.env.RELAY_FAST_TEXT_MODEL || 'gpt-4.1-nano').trim() || 'gpt-4.1-nano';
 const FAST_VISION_MODEL = String(process.env.RELAY_FAST_VISION_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini';
 const CONTEXT_CAPTURE_DIR_NAME = 'Relay Context Captures';
@@ -102,9 +104,8 @@ function markSetupComplete() {
 }
 
 const activeWindow = require('active-win');
-const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
-const deepgramApiKey = String(process.env.DEEPGRAM_API_KEY || '').trim();
-const deepgram = deepgramApiKey ? createClient(deepgramApiKey) : null;
+const { LiveTranscriptionEvents } = require('@deepgram/sdk');
+const { getOpenAIClient, getDeepgramClient, getAIMode, toUploadFile } = require('./ai-clients');
 
 // Initialize settings
 settings.init();
@@ -112,23 +113,6 @@ settings.init();
 // Polling interval for active window
 let contextInterval;
 let lastContextApp = "";
-
-function getOpenAIClient() {
-    if (!process.env.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY is not configured');
-    }
-
-    if (!openAIClient) {
-        const OpenAI = require('openai');
-        openAIClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-
-    return openAIClient;
-}
-
-function hasDeepgramKeyConfigured() {
-    return Boolean(deepgramApiKey);
-}
 
 function extractMessageJson(message) {
     if (!message) return null;
@@ -170,6 +154,26 @@ function estimateDataUrlBytes(dataUrl) {
     const b64 = source.slice(commaIndex + 1);
     const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
     return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+// Vision models downscale to 2048px anyway, and the Relay API proxy rejects
+// request bodies over 4.5 MB, so large images are re-encoded as JPEG first.
+const MAX_UPLOAD_IMAGE_WIDTH = 2048;
+const MAX_UPLOAD_IMAGE_BYTES = 2.5 * 1024 * 1024;
+
+function encodeImageForUpload(image) {
+    const { width } = image.getSize();
+    const resized = width > MAX_UPLOAD_IMAGE_WIDTH ? image.resize({ width: MAX_UPLOAD_IMAGE_WIDTH, quality: 'good' }) : image;
+    return `data:image/jpeg;base64,${resized.toJPEG(80).toString('base64')}`;
+}
+
+function normalizeImageForUpload(dataUrl) {
+    const source = String(dataUrl || '');
+    if (!source.startsWith('data:image/') || estimateDataUrlBytes(source) <= MAX_UPLOAD_IMAGE_BYTES) {
+        return source;
+    }
+    const image = nativeImage.createFromDataURL(source);
+    return image.isEmpty() ? source : encodeImageForUpload(image);
 }
 
 function decodeImageDataUrl(dataUrl) {
@@ -1519,7 +1523,7 @@ async function getPrimaryScreenScreenshotDataUrl() {
     if (!selectedSource?.thumbnail) {
         throw new Error('No screen thumbnail available. Enable Screen Recording permission.');
     }
-    return selectedSource.thumbnail.toDataURL();
+    return encodeImageForUpload(selectedSource.thumbnail);
 }
 
 async function getActiveAppNameSafe() {
@@ -2337,64 +2341,46 @@ function createTranscriptWindow() {
     });
 }
 
-// Global WebSocket Server instance
-let wss = null;
-let connectedMobiles = new Set();
+// LAN bridge to the Relay mobile app (pairing, alerts, captions, Remote Mic).
+let mobileBridge = null;
+
+function broadcastToWindows(channel, payload) {
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+}
+
+ipcMain.handle('broadcast-alert', async (_event, payload = {}) => {
+    if (!mobileBridge) return;
+    mobileBridge.broadcast({
+        type: 'ALERT',
+        message: String(payload.message || 'Sound detected').slice(0, 200),
+        severity: payload.severity === 'high' ? 'high' : 'normal'
+    });
+});
+
+ipcMain.handle('mobile-pairing-info', async () => {
+    if (!mobileBridge) return { running: false, error: 'Phone bridge is starting' };
+    return mobileBridge.getPairingInfo();
+});
+
+ipcMain.handle('mobile-pairing-regenerate', async () => {
+    if (!mobileBridge) return { running: false, error: 'Phone bridge is starting' };
+    return mobileBridge.regenerateToken();
+});
 
 app.whenReady().then(() => {
-    // Start WebSocket Server for Mobile Middleware connection
-    try {
-        wss = new WebSocket.Server({ port: 8080 });
-        const os = require('os');
-        const nets = os.networkInterfaces();
-        let localIP = 'unknown';
-        for (const name of Object.keys(nets)) {
-            for (const net of nets[name]) {
-                if (net.family === 'IPv4' && !net.internal) {
-                    localIP = net.address;
-                    break;
-                }
-            }
-            if (localIP !== 'unknown') break;
-        }
-        console.log(`[WS Server] Running on ws://${localIP}:8080`);
-        
-        wss.on('connection', (ws) => {
-            console.log('[WS Server] Mobile client connected');
-            connectedMobiles.add(ws);
-            
-            // Send welcome so mobile confirms link
-            ws.send(JSON.stringify({ type: 'WELCOME', ip: localIP, app: 'Relay Mac' }));
-            
-            ws.on('message', (msg) => {
-                try {
-                    const data = JSON.parse(msg);
-                    if (data.type === 'PING') {
-                        ws.send(JSON.stringify({ type: 'PONG' }));
-                    }
-                } catch (e) {}
-            });
-            
-            ws.on('close', () => {
-                console.log('[WS Server] Mobile client disconnected');
-                connectedMobiles.delete(ws);
-            });
-        });
-    } catch (e) {
-        console.error('[WS Server] Failed to start', e);
-    }
-
-    // Expose IPC for broadcasting alerts to phones
-    ipcMain.handle('broadcast-alert', async (event, payload) => {
-        if (!wss) return;
-        const msg = JSON.stringify({ type: 'ALERT', ...payload });
-        for (const client of connectedMobiles) {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(msg);
-            }
+    mobileBridge = new MobileBridge({
+        hooks: {
+            onAudioStart: handleRemoteMicStart,
+            onAudioFrame: handleRemoteMicFrame,
+            onAudioStop: handleRemoteMicStop
         }
     });
-
+    mobileBridge.on('status', (status) => broadcastToWindows('mobile-bridge-status', status));
+    mobileBridge.start().catch((error) => {
+        console.error('[MobileBridge] Failed to start:', error?.message || error);
+    });
 
     // Grant microphone permission automatically for this app
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -2479,6 +2465,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
     unregisterAll();
+    mobileBridge?.stop();
 });
 
 // ============================================
@@ -2968,9 +2955,7 @@ ipcMain.handle('test-accessibility', async () => {
 
 ipcMain.handle('test-deepgram', async () => {
     try {
-        if (!hasDeepgramKeyConfigured() || !deepgram) {
-            return { success: false, error: 'DEEPGRAM_API_KEY is not configured' };
-        }
+        const deepgram = await getDeepgramClient();
         const connection = deepgram.listen.live({
             model: 'nova-2',
             language: 'en-US',
@@ -3002,14 +2987,7 @@ ipcMain.handle('test-deepgram', async () => {
 
 ipcMain.handle('test-tts', async () => {
     try {
-        const OpenAI = require('openai');
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-        if (!process.env.OPENAI_API_KEY) {
-            return { success: false, error: "OpenAI API key not configured" };
-        }
-
-        const models = await openai.models.list();
+        await getOpenAIClient().models.retrieve('tts-1');
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -3078,38 +3056,129 @@ ipcMain.on('close-setup', () => {
 // DEEPGRAM REAL-TIME STREAMING
 // ============================================
 
+const DEFAULT_CAPTION_SAMPLE_RATE = 16000;
+const DEEPGRAM_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000, 30000];
+const DEEPGRAM_KEEPALIVE_MS = 5000;
+const CAPTION_INTERIM_BROADCAST_MS = 150;
+
 let deepgramConnection = null;
 let isDeepgramConnected = false;
+let deepgramSampleRate = DEFAULT_CAPTION_SAMPLE_RATE;
+let deepgramStartPromise = null;
+let deepgramReconnectTimer = null;
+let deepgramReconnectAttempt = 0;
+let deepgramKeepAliveTimer = null;
+let lastDeepgramAudioAt = 0;
+let rendererCaptionsActive = false;
+let remoteMicActive = false;
+let remoteMicDevice = null;
+let captionAudioSource = 'local';
+let lastInterimBroadcastAt = 0;
 
-async function startDeepgramStream() {
-    if (!hasDeepgramKeyConfigured() || !deepgram) {
-        console.warn('[Deepgram] Missing DEEPGRAM_API_KEY. Streaming disabled.');
-        isDeepgramConnected = false;
-        if (overlayWindow && !overlayWindow.isDestroyed()) {
-            overlayWindow.webContents.send('deepgram-status', {
-                connected: false,
-                error: 'DEEPGRAM_API_KEY is not configured'
-            });
+function sendToOverlay(channel, payload) {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.webContents.send(channel, payload);
+    }
+}
+
+function isDeepgramWanted() {
+    return rendererCaptionsActive || remoteMicActive;
+}
+
+function broadcastCaptionToMobiles(result) {
+    if (!mobileBridge || !mobileBridge.connectedCount) return;
+    if (!result.isFinal) {
+        const now = Date.now();
+        if (now - lastInterimBroadcastAt < CAPTION_INTERIM_BROADCAST_MS) return;
+        lastInterimBroadcastAt = now;
+    }
+    const speaker = result.words.find((word) => Number.isInteger(word.speaker))?.speaker;
+    mobileBridge.broadcast({
+        type: 'CAPTION',
+        text: result.transcript,
+        isFinal: result.isFinal,
+        speaker: Number.isInteger(speaker) ? speaker : null
+    });
+}
+
+function startDeepgramKeepAlive() {
+    stopDeepgramKeepAlive();
+    deepgramKeepAliveTimer = setInterval(() => {
+        if (!deepgramConnection || !isDeepgramConnected) return;
+        if (Date.now() - lastDeepgramAudioAt < DEEPGRAM_KEEPALIVE_MS) return;
+        try {
+            deepgramConnection.keepAlive();
+        } catch (error) {
+            console.warn('[Deepgram] keepAlive failed:', error?.message || error);
         }
+    }, DEEPGRAM_KEEPALIVE_MS);
+}
+
+function stopDeepgramKeepAlive() {
+    if (deepgramKeepAliveTimer) {
+        clearInterval(deepgramKeepAliveTimer);
+        deepgramKeepAliveTimer = null;
+    }
+}
+
+function scheduleDeepgramReconnect() {
+    if (!isDeepgramWanted() || deepgramReconnectTimer) return;
+    const delay = DEEPGRAM_RECONNECT_DELAYS_MS[Math.min(deepgramReconnectAttempt, DEEPGRAM_RECONNECT_DELAYS_MS.length - 1)];
+    deepgramReconnectAttempt += 1;
+    console.log(`[Deepgram] Reconnecting in ${delay}ms`);
+    deepgramReconnectTimer = setTimeout(() => {
+        deepgramReconnectTimer = null;
+        if (isDeepgramWanted()) startDeepgramStream();
+    }, delay);
+}
+
+function clearDeepgramReconnect() {
+    if (deepgramReconnectTimer) {
+        clearTimeout(deepgramReconnectTimer);
+        deepgramReconnectTimer = null;
+    }
+}
+
+// Detach before closing so the Close handler does not schedule a reconnect.
+async function closeDeepgramConnection() {
+    const connection = deepgramConnection;
+    deepgramConnection = null;
+    isDeepgramConnected = false;
+    stopDeepgramKeepAlive();
+    if (connection) {
+        try {
+            await connection.finish();
+        } catch (e) {
+            console.error('[Deepgram] Error closing connection:', e);
+        }
+    }
+}
+
+async function openDeepgramStream(sampleRate) {
+    let deepgram;
+    try {
+        deepgram = await getDeepgramClient();
+    } catch (error) {
+        console.error('[Deepgram] Could not get client:', error?.message || error);
+        isDeepgramConnected = false;
+        sendToOverlay('deepgram-status', { connected: false, error: error?.message || 'Speech service unavailable' });
+        scheduleDeepgramReconnect();
         return false;
     }
 
-    if (deepgramConnection && isDeepgramConnected) {
-        console.log('[Deepgram] Already connected');
-        return true;
-    }
-
     return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value) => {
+            if (!settled) {
+                settled = true;
+                resolve(value);
+            }
+        };
+
         try {
-            console.log('[Deepgram] Starting Nova-2 streaming connection...');
+            console.log(`[Deepgram] Starting Nova-2 streaming connection (${sampleRate} Hz, ${getAIMode().deepgram})...`);
 
-            const connectionTimeout = setTimeout(() => {
-                console.error('[Deepgram] Connection timeout');
-                isDeepgramConnected = false;
-                resolve(false);
-            }, 10000);
-
-            deepgramConnection = deepgram.listen.live({
+            const connection = deepgram.listen.live({
                 model: 'nova-2',
                 language: settings.get('language') || 'en-US',
                 smart_format: true,
@@ -3119,20 +3188,40 @@ async function startDeepgramStream() {
                 utterance_end_ms: 1000,
                 filler_words: true,
                 encoding: 'linear16',
-                sample_rate: 16000,
+                sample_rate: sampleRate,
+                mip_opt_out: true,
             });
+            deepgramConnection = connection;
+            deepgramSampleRate = sampleRate;
 
-            deepgramConnection.on(LiveTranscriptionEvents.Open, () => {
+            const connectionTimeout = setTimeout(() => {
+                console.error('[Deepgram] Connection timeout');
+                if (deepgramConnection === connection) {
+                    deepgramConnection = null;
+                    isDeepgramConnected = false;
+                }
+                try { connection.finish(); } catch (e) {}
+                scheduleDeepgramReconnect();
+                settle(false);
+            }, 10000);
+
+            connection.on(LiveTranscriptionEvents.Open, () => {
                 clearTimeout(connectionTimeout);
+                if (deepgramConnection !== connection) {
+                    try { connection.finish(); } catch (e) {}
+                    settle(false);
+                    return;
+                }
                 console.log('[Deepgram] WebSocket connected');
                 isDeepgramConnected = true;
-                if (overlayWindow) {
-                    overlayWindow.webContents.send('deepgram-status', { connected: true });
-                }
-                resolve(true);
+                deepgramReconnectAttempt = 0;
+                lastDeepgramAudioAt = Date.now();
+                startDeepgramKeepAlive();
+                sendToOverlay('deepgram-status', { connected: true });
+                settle(true);
             });
 
-            deepgramConnection.on(LiveTranscriptionEvents.Transcript, (data) => {
+            connection.on(LiveTranscriptionEvents.Transcript, (data) => {
                 const alternative = data.channel?.alternatives?.[0];
                 if (alternative && alternative.transcript) {
                     const result = {
@@ -3150,78 +3239,147 @@ async function startDeepgramStream() {
                         confidence: alternative.confidence || 0,
                     };
 
-                    if (overlayWindow && result.transcript.trim()) {
-                        overlayWindow.webContents.send('deepgram-transcript', result);
+                    if (result.transcript.trim()) {
+                        sendToOverlay('deepgram-transcript', result);
+                        broadcastCaptionToMobiles(result);
                     }
                 }
             });
 
-            deepgramConnection.on(LiveTranscriptionEvents.UtteranceEnd, () => {
-                if (overlayWindow) {
-                    overlayWindow.webContents.send('deepgram-utterance-end');
-                }
+            connection.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+                sendToOverlay('deepgram-utterance-end');
             });
 
-            deepgramConnection.on(LiveTranscriptionEvents.Error, (error) => {
+            connection.on(LiveTranscriptionEvents.Error, (error) => {
                 clearTimeout(connectionTimeout);
-                console.error('[Deepgram] Streaming error:', error);
-                isDeepgramConnected = false;
-                if (overlayWindow) {
-                    overlayWindow.webContents.send('deepgram-status', { connected: false, error: error.message });
+                console.error('[Deepgram] Streaming error:', error?.message || error);
+                if (deepgramConnection === connection) {
+                    isDeepgramConnected = false;
+                    sendToOverlay('deepgram-status', { connected: false, error: error?.message || 'Connection error' });
                 }
-                resolve(false);
+                settle(false);
             });
 
-            deepgramConnection.on(LiveTranscriptionEvents.Close, () => {
+            connection.on(LiveTranscriptionEvents.Close, () => {
+                clearTimeout(connectionTimeout);
                 console.log('[Deepgram] WebSocket closed');
-                isDeepgramConnected = false;
-                deepgramConnection = null;
+                if (deepgramConnection === connection) {
+                    deepgramConnection = null;
+                    isDeepgramConnected = false;
+                    stopDeepgramKeepAlive();
+                    sendToOverlay('deepgram-status', { connected: false });
+                    scheduleDeepgramReconnect();
+                }
+                settle(false);
             });
-
         } catch (error) {
             console.error('[Deepgram] Failed to start streaming:', error);
             isDeepgramConnected = false;
-            resolve(false);
+            scheduleDeepgramReconnect();
+            settle(false);
         }
     });
 }
 
+async function startDeepgramStream(options = {}) {
+    const sampleRate = options.sampleRate || deepgramSampleRate;
+    if (deepgramStartPromise) {
+        await deepgramStartPromise;
+    }
+    if (deepgramConnection && isDeepgramConnected) {
+        if (sampleRate === deepgramSampleRate) return true;
+        await closeDeepgramConnection();
+    }
+    clearDeepgramReconnect();
+    deepgramStartPromise = openDeepgramStream(sampleRate).finally(() => {
+        deepgramStartPromise = null;
+    });
+    return deepgramStartPromise;
+}
+
 async function stopDeepgramStream() {
-    if (deepgramConnection) {
-        try {
-            await deepgramConnection.finish();
-        } catch (e) {
-            console.error('[Deepgram] Error closing connection:', e);
-        }
-        deepgramConnection = null;
-        isDeepgramConnected = false;
+    clearDeepgramReconnect();
+    deepgramReconnectAttempt = 0;
+    await closeDeepgramConnection();
+}
+
+function sendDeepgramAudio(buffer) {
+    if (!deepgramConnection || !isDeepgramConnected) return;
+    try {
+        deepgramConnection.send(buffer);
+        lastDeepgramAudioAt = Date.now();
+    } catch (error) {
+        console.error('[Deepgram] Error sending audio:', error);
+    }
+}
+
+function notifyCaptionSource() {
+    sendToOverlay('caption-source-changed', {
+        source: captionAudioSource,
+        device: remoteMicDevice,
+        remoteMicActive
+    });
+}
+
+// Phone microphone (Remote Mic) routing. Local capture keeps running so sound
+// alerts and the visualizer still work; only its caption frames are dropped.
+async function handleRemoteMicStart({ sampleRate, deviceName }) {
+    remoteMicActive = true;
+    remoteMicDevice = deviceName || 'Phone';
+    captionAudioSource = 'phone';
+    notifyCaptionSource();
+    const connected = await startDeepgramStream({ sampleRate });
+    return connected ? { ok: true } : { ok: false, error: 'Captions service unavailable' };
+}
+
+function handleRemoteMicFrame(buffer) {
+    if (captionAudioSource !== 'phone') return;
+    sendDeepgramAudio(buffer);
+}
+
+function handleRemoteMicStop() {
+    remoteMicActive = false;
+    remoteMicDevice = null;
+    captionAudioSource = 'local';
+    notifyCaptionSource();
+    if (!rendererCaptionsActive) {
+        stopDeepgramStream();
+    } else if (deepgramSampleRate !== DEFAULT_CAPTION_SAMPLE_RATE) {
+        startDeepgramStream({ sampleRate: DEFAULT_CAPTION_SAMPLE_RATE });
     }
 }
 
 ipcMain.handle('deepgram-start', async () => {
-    if (!hasDeepgramKeyConfigured()) {
-        return { success: false, error: 'DEEPGRAM_API_KEY is not configured' };
+    rendererCaptionsActive = true;
+    const sampleRate = captionAudioSource === 'phone' ? deepgramSampleRate : DEFAULT_CAPTION_SAMPLE_RATE;
+    const connected = await startDeepgramStream({ sampleRate });
+    if (!connected) {
+        // The renderer falls back to offline transcription and stops sending audio.
+        rendererCaptionsActive = false;
+        if (!remoteMicActive) await stopDeepgramStream();
     }
-    const connected = await startDeepgramStream();
     return connected
         ? { success: true }
-        : { success: false, error: 'Unable to connect to Deepgram stream' };
+        : { success: false, error: 'Unable to connect to the captions service' };
 });
 
 ipcMain.handle('deepgram-stop', async () => {
-    await stopDeepgramStream();
+    rendererCaptionsActive = false;
+    if (!remoteMicActive) {
+        await stopDeepgramStream();
+    }
     return { success: true };
 });
 
 ipcMain.on('deepgram-audio', (event, audioData) => {
-    if (deepgramConnection && isDeepgramConnected) {
-        try {
-            const buffer = Buffer.from(new Int16Array(audioData).buffer);
-            deepgramConnection.send(buffer);
-        } catch (error) {
-            console.error('[Deepgram] Error sending audio:', error);
-        }
-    }
+    if (captionAudioSource !== 'local') return;
+    sendDeepgramAudio(Buffer.from(new Int16Array(audioData).buffer));
+});
+
+ipcMain.handle('set-caption-source', async (_event, source) => {
+    captionAudioSource = source === 'phone' && remoteMicActive ? 'phone' : 'local';
+    notifyCaptionSource();
+    return { success: true, source: captionAudioSource };
 });
 
 // Legacy pre-recorded transcription
@@ -3271,8 +3429,7 @@ ipcMain.handle('classifier-status', () => {
 ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
     const wavBuffer = float32ToWav(audioBuffer, 16000);
     try {
-        if (!hasDeepgramKeyConfigured() || !deepgram) throw new Error('DEEPGRAM_API_KEY is not configured');
-
+        const deepgram = await getDeepgramClient();
         const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
             wavBuffer,
             {
@@ -3292,16 +3449,12 @@ ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
         console.warn('[Fallback] Deepgram failed, routing to OpenAI Transcribe...', error.message);
         try {
             const openai = getOpenAIClient();
-            const tempPath = path.join(os.tmpdir(), `relay_transcribe_${Date.now()}.wav`);
-            fs.writeFileSync(tempPath, wavBuffer);
-            
             const transcription = await openai.audio.transcriptions.create({
-                file: fs.createReadStream(tempPath),
+                file: await toUploadFile(wavBuffer, 'audio.wav'),
                 model: 'gpt-4o-mini-transcribe',
                 language: 'en'
             });
-            fs.unlinkSync(tempPath);
-            
+
             return { success: true, text: transcription.text };
         } catch (fallbackErr) {
             console.error('[OpenAI Transcribe Failed]', fallbackErr);
@@ -3429,7 +3582,7 @@ ipcMain.handle('capture-screen', async (_event, options = {}) => {
 
 ipcMain.handle('analyze-image', async (_event, imageData, options = {}) => {
     try {
-        const imageDataUrl = String(imageData || '').trim();
+        const imageDataUrl = normalizeImageForUpload(String(imageData || '').trim());
         const isDataImage = imageDataUrl.startsWith('data:image/');
         const isRemoteImage = /^https?:\/\//i.test(imageDataUrl);
         if (!isDataImage && !isRemoteImage) {
@@ -3468,7 +3621,7 @@ ipcMain.handle('context-assist', async (_event, payload = {}) => {
 
         const includeScreen = payload?.includeScreen !== false;
         const includeCamera = payload?.includeCamera !== false;
-        const cameraImageDataUrl = String(payload?.cameraImageDataUrl || '').trim();
+        const cameraImageDataUrl = normalizeImageForUpload(String(payload?.cameraImageDataUrl || '').trim());
         const hasCameraImage = includeCamera && /^data:image\//i.test(cameraImageDataUrl);
         const cameraMeta = payload?.cameraMeta && typeof payload.cameraMeta === 'object'
             ? payload.cameraMeta
@@ -3691,9 +3844,15 @@ Return ONLY valid JSON: {"action": "action-name", "params": {}}`
 // NEW: MEETING SUMMARY GENERATION
 // ============================================
 
+const MAX_SUMMARY_TRANSCRIPT_CHARS = 200_000;
+
 ipcMain.handle('generate-meeting-summary', async (event, data) => {
     try {
         const openai = getOpenAIClient();
+        const fullTranscript = String(data?.transcript || '');
+        const transcript = fullTranscript.length > MAX_SUMMARY_TRANSCRIPT_CHARS
+            ? `[Earlier part of the meeting omitted]\n${fullTranscript.slice(-MAX_SUMMARY_TRANSCRIPT_CHARS)}`
+            : fullTranscript;
 
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
@@ -3728,7 +3887,7 @@ Be concise but don't miss important details.`
                 },
                 {
                     role: 'user',
-                    content: `Meeting on ${data.app}, duration: ${Math.round(data.duration / 60000)} minutes, ${data.speakerCount} speakers.\n\nFull transcript:\n${data.transcript}`
+                    content: `Meeting on ${data.app}, duration: ${Math.round(data.duration / 60000)} minutes, ${data.speakerCount} speakers.\n\nFull transcript:\n${transcript}`
                 }
             ],
             max_tokens: 1000

@@ -352,7 +352,7 @@ btnTestConnection.addEventListener('click', async () => {
         btnTestConnection.innerText = 'Retry';
         btnTestConnection.disabled = false;
         apiError.classList.add('visible');
-        apiErrorText.innerText = 'Could not connect to Deepgram. Check your internet connection or API key. Offline mode is available as a fallback.';
+        apiErrorText.innerText = 'Could not reach the Relay captions service. Check your internet connection and try again. Offline mode is available as a fallback.';
         offlineInfo.style.display = 'block';
     }
 });

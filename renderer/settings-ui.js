@@ -17,6 +17,7 @@ tabs.forEach(tab => {
         sections.forEach(s => s.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'phone') refreshPhonePairing();
     });
 });
 
@@ -235,6 +236,83 @@ function populateAll() {
 }
 
 // ============================================
+// PHONE PAIRING
+// ============================================
+
+function renderPhoneStatus(status) {
+    const statusEl = document.getElementById('pair-status');
+    if (!statusEl || !status) return;
+    if (!status.running) {
+        statusEl.textContent = status.error
+            ? `Phone connection is unavailable: ${status.error}`
+            : 'Phone connection is starting...';
+        return;
+    }
+    const count = Number(status.connectedCount || 0);
+    let text = count === 0
+        ? 'No phones connected.'
+        : `${count} phone${count === 1 ? '' : 's'} connected: ${(status.devices || []).join(', ')}.`;
+    if (status.remoteMicActive) {
+        text += ` Remote Mic active from ${status.remoteMicDevice || 'phone'}.`;
+    }
+    statusEl.textContent = text;
+}
+
+async function refreshPhonePairing() {
+    if (!api.getMobilePairingInfo) return;
+    let info;
+    try {
+        info = await api.getMobilePairingInfo();
+    } catch (e) {
+        info = { running: false, error: e.message };
+    }
+    renderPairingInfo(info);
+}
+
+function renderPairingInfo(info) {
+    const qr = document.getElementById('pair-qr');
+    const qrEmpty = document.getElementById('pair-qr-empty');
+    const nameEl = document.getElementById('pair-name');
+    const addressEl = document.getElementById('pair-address');
+    const codeEl = document.getElementById('pair-code');
+    if (!qr || !info) return;
+
+    nameEl.textContent = info.name || '-';
+    addressEl.textContent = info.host && info.port ? `${info.host}:${info.port}` : 'No network connection';
+    codeEl.textContent = info.code || '-';
+
+    if (info.qrDataUrl) {
+        qr.src = info.qrDataUrl;
+        qr.hidden = false;
+        qrEmpty.hidden = true;
+    } else {
+        qr.hidden = true;
+        qrEmpty.hidden = false;
+        qrEmpty.textContent = info.running
+            ? 'Connect this computer to Wi-Fi to pair a phone.'
+            : 'Phone connection is unavailable.';
+    }
+    renderPhoneStatus(info);
+}
+
+function bindPhonePairing() {
+    const regenerate = document.getElementById('pair-regenerate-btn');
+    if (regenerate && api.regenerateMobilePairing) {
+        regenerate.addEventListener('click', async () => {
+            if (!confirm('Regenerate the pairing code? Paired phones will be disconnected.')) return;
+            renderPairingInfo(await api.regenerateMobilePairing());
+        });
+    }
+    if (api.onMobileBridgeStatus) {
+        api.onMobileBridgeStatus((status) => {
+            renderPhoneStatus(status);
+            if (document.getElementById('phone')?.classList.contains('active')) refreshPhonePairing();
+        });
+    }
+    refreshPhonePairing();
+}
+
+// ============================================
 // INIT
 // ============================================
 (async function init() {
@@ -245,6 +323,7 @@ function populateAll() {
         currentSettings = {};
     }
     populateAll();
+    bindPhonePairing();
 
     // Listen for external settings changes
     if (api.onSettingsChanged) {

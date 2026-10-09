@@ -25,8 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     desktopClickTarget: (targetPhrase) => ipcRenderer.invoke('desktop-click-target', targetPhrase),
     desktopTypeText: (payload) => ipcRenderer.invoke('desktop-type-text', payload),
     desktopPressKey: (payload) => ipcRenderer.invoke('desktop-press-key', payload),
-    runPremiumAutomationPlan: (plan) => ipcRenderer.invoke('run-premium-automation-plan', plan),
-    runStandardAutomationFlow: (prompt, parsed) => ipcRenderer.invoke('run-standard-automation-flow', prompt, parsed),
+    desktopAutomationPlan: (payload) => ipcRenderer.invoke('desktop-automation-plan', payload),
+    desktopAutomationExecute: (plan) => ipcRenderer.invoke('desktop-automation-execute', plan),
     broadcastAlert: (data) => ipcRenderer.invoke('broadcast-alert', data),
     desktopAutomationStatus: () => ipcRenderer.invoke('desktop-automation-status'),
     onAutomationPreflight: (callback) => ipcRenderer.on('automation-preflight', (_event, status) => callback(status)),
@@ -43,6 +43,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDeepgramTranscript: (callback) => ipcRenderer.on('deepgram-transcript', (_event, result) => callback(result)),
     onDeepgramStatus: (callback) => ipcRenderer.on('deepgram-status', (_event, status) => callback(status)),
     onDeepgramUtteranceEnd: (callback) => ipcRenderer.on('deepgram-utterance-end', () => callback()),
+
+    // Phone pairing and Remote Mic
+    getMobilePairingInfo: () => ipcRenderer.invoke('mobile-pairing-info'),
+    regenerateMobilePairing: () => ipcRenderer.invoke('mobile-pairing-regenerate'),
+    onMobileBridgeStatus: (callback) => ipcRenderer.on('mobile-bridge-status', (_event, status) => callback(status)),
+    setCaptionSource: (source) => ipcRenderer.invoke('set-caption-source', source),
+    onCaptionSourceChanged: (callback) => ipcRenderer.on('caption-source-changed', (_event, info) => callback(info)),
 
     // TTS
     ttsSpeak: (text) => ipcRenderer.invoke('tts-speak', text),

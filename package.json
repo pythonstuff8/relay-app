@@ -1,22 +1,23 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Relay Accessibility App",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --mac --win --linux",
     "build:mac": "electron-builder --mac",
-    "build:mac:signed": "/bin/zsh -lc 'set -a; source .env; set +a; electron-builder --mac'",
+    "build:mac:signed": "/bin/zsh -lc 'set -a; source .env.signing; set +a; electron-builder --mac'",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "verify:voice-commands": "node scripts/verify-voice-commands.js",
     "verify:gesture-migration": "node scripts/verify-gesture-migration.js",
     "verify:sound-alert-rules": "node scripts/verify-sound-alert-rules.js",
     "verify:premium-automation": "node scripts/verify-premium-automation.js",
-    "verify:strict": "npm run -s verify:voice-commands && npm run -s verify:gesture-migration && npm run -s verify:sound-alert-rules && npm run -s verify:premium-automation",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "verify:strict": "npm run -s verify:voice-commands && npm run -s verify:gesture-migration && npm run -s verify:sound-alert-rules && npm run -s verify:premium-automation && npm run -s verify:mobile-bridge",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "verify:mobile-bridge": "node scripts/verify-mobile-bridge.js"
   },
   "keywords": [],
   "author": "Suhaan Thayyil",
@@ -36,12 +37,6 @@
       "node_modules/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      }
-    ],
     "mac": {
       "artifactName": "Relay-mac-${arch}.${ext}",
       "target": [
@@ -60,7 +55,10 @@
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Relay needs microphone access for real-time speech captioning.",
-        "NSScreenCaptureUsageDescription": "Relay needs screen capture for system audio and screen explanation features."
+        "NSScreenCaptureUsageDescription": "Relay needs screen capture for system audio and screen explanation features.",
+        "NSCameraUsageDescription": "Relay uses the camera for gesture input and visual assistance when you ask for help.",
+        "NSAppleEventsUsageDescription": "Relay controls other apps to carry out voice commands you request.",
+        "NSLocalNetworkUsageDescription": "Relay connects to the Relay mobile app on your local network for alerts, captions, and Remote Mic."
       }
     },
     "dmg": {
@@ -123,6 +121,7 @@
     }
   },
   "devDependencies": {
+    "dotenv": "^17.2.3",
     "electron": "^40.8.5",
     "electron-builder": "^26.4.0"
   },
@@ -130,14 +129,10 @@
     "@deepgram/sdk": "^4.11.3",
     "@mediapipe/tasks-audio": "^0.10.15-rc.20240817",
     "@mediapipe/tasks-vision": "^0.10.33",
-    "@tensorflow/tfjs": "^4.22.0",
-    "@xenova/transformers": "^2.17.2",
     "active-win": "^8.2.1",
-    "dotenv": "^17.2.3",
     "electron-store": "^8.2.0",
     "openai": "^6.16.0",
-    "three": "^0.160.1",
-    "wavefile": "^11.0.0",
+    "qrcode": "^1.5.4",
     "ws": "^8.20.0"
   }
 }

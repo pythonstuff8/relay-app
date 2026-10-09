@@ -619,13 +619,28 @@ sourcesSelect.style.cssText = `
 `;
 document.getElementById('caption-bar').appendChild(sourcesSelect);
 
+const PHONE_MIC_SOURCE = 'phone-mic';
+let phoneMicAvailable = false;
+let phoneMicDevice = '';
+
+function phoneMicOptionLabel() {
+    return phoneMicAvailable ? `Phone Microphone (${phoneMicDevice || 'Remote Mic'})` : 'Phone Microphone (start Remote Mic on your phone)';
+}
+
 async function refreshSources() {
+    const previousValue = sourcesSelect.value;
     try {
         const sources = await window.electronAPI.getSources();
         sourcesSelect.innerHTML = `
             <option value="mic">Microphone (Default)</option>
             <option value="system-audio">System Audio (Screen)</option>
         `;
+
+        const phoneOption = document.createElement('option');
+        phoneOption.value = PHONE_MIC_SOURCE;
+        phoneOption.innerText = phoneMicOptionLabel();
+        phoneOption.disabled = !phoneMicAvailable;
+        sourcesSelect.appendChild(phoneOption);
 
         if (sources && sources.length > 0) {
             sources.forEach(source => {
@@ -635,9 +650,31 @@ async function refreshSources() {
                 sourcesSelect.appendChild(option);
             });
         }
+        if ([...sourcesSelect.options].some((option) => option.value === previousValue && !option.disabled)) {
+            sourcesSelect.value = previousValue;
+        }
     } catch (e) {
         window.electronAPI.log("Error getting sources: " + e);
     }
+}
+
+if (window.electronAPI.onCaptionSourceChanged) {
+    window.electronAPI.onCaptionSourceChanged((info = {}) => {
+        phoneMicAvailable = Boolean(info.remoteMicActive);
+        phoneMicDevice = info.device || '';
+        const phoneOption = [...sourcesSelect.options].find((option) => option.value === PHONE_MIC_SOURCE);
+        if (phoneOption) {
+            phoneOption.disabled = !phoneMicAvailable;
+            phoneOption.innerText = phoneMicOptionLabel();
+        }
+        if (info.source === 'phone') {
+            if (phoneOption) sourcesSelect.value = PHONE_MIC_SOURCE;
+            statusTextEl.innerText = `Listening (Phone Microphone: ${phoneMicDevice || 'Remote Mic'})`;
+        } else if (sourcesSelect.value === PHONE_MIC_SOURCE) {
+            sourcesSelect.value = 'mic';
+            statusTextEl.innerText = 'Listening (Microphone)';
+        }
+    });
 }
 
 sourcesSelect.addEventListener('mouseenter', () => {
@@ -646,7 +683,14 @@ sourcesSelect.addEventListener('mouseenter', () => {
 });
 
 sourcesSelect.addEventListener('change', async (e) => {
-    startRecording(e.target.value);
+    const value = e.target.value;
+    if (value === PHONE_MIC_SOURCE) {
+        // Local capture keeps running for sound alerts; captions come from the phone.
+        await window.electronAPI.setCaptionSource?.('phone');
+        return;
+    }
+    await window.electronAPI.setCaptionSource?.('local');
+    startRecording(value);
 });
 
 // ============================================

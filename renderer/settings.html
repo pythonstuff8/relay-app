@@ -328,6 +328,78 @@
         .btn-danger:hover {
             opacity: 0.9;
         }
+
+        /* Phone pairing */
+        .pairing-card {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            max-width: 560px;
+            padding: 16px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            background: var(--color-surface);
+        }
+
+        .pairing-qr {
+            width: 180px;
+            height: 180px;
+            flex-shrink: 0;
+            border-radius: var(--radius-md);
+            background: #fff;
+            image-rendering: pixelated;
+        }
+
+        .pairing-qr-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 12px;
+            font-size: var(--font-size-xs);
+            color: var(--color-secondary);
+            border: 1px dashed var(--color-border);
+        }
+
+        .pairing-details dt {
+            font-size: var(--font-size-xs);
+            color: var(--color-secondary);
+            margin-top: 10px;
+        }
+
+        .pairing-details dt:first-child {
+            margin-top: 0;
+        }
+
+        .pairing-details dd {
+            margin: 2px 0 0;
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            user-select: text;
+        }
+
+        .pairing-status {
+            margin-top: 14px;
+            max-width: 560px;
+            font-size: var(--font-size-sm);
+        }
+
+        .btn-secondary {
+            background: var(--color-surface-tertiary);
+            color: var(--color-text);
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            margin-top: 16px;
+        }
+
+        .btn-secondary:hover {
+            opacity: 0.85;
+        }
     </style>
 </head>
 
@@ -338,6 +410,7 @@
         <div class="sidebar-item" data-tab="sound-alerts">Sound Alerts</div>
         <div class="sidebar-item" data-tab="ai">AI Assistant</div>
         <div class="sidebar-item" data-tab="meeting">Meeting</div>
+        <div class="sidebar-item" data-tab="phone">Phone</div>
         <div class="sidebar-item" data-tab="privacy">Privacy</div>
         <div class="sidebar-item" data-tab="shortcuts">Shortcuts</div>
         <div class="sidebar-item" data-tab="advanced">Advanced</div>
@@ -696,6 +769,36 @@
             </div>
             <div class="label-hint" style="max-width:400px;">
                 Transcripts older than this will be automatically deleted.
+            </div>
+        </div>
+
+        <!-- PHONE -->
+        <div id="phone" class="section">
+            <h1>Phone</h1>
+            <div class="label-hint" style="max-width:560px;margin-bottom:16px;">
+                Pair the Relay mobile app to get sound alerts as vibrations, follow captions on your phone,
+                and use your phone as a Remote Mic. Open the app, choose Connect to Computer, and scan this code.
+                Both devices must be on the same Wi-Fi network.
+            </div>
+
+            <div class="pairing-card">
+                <img id="pair-qr" class="pairing-qr" alt="Pairing QR code" hidden>
+                <div id="pair-qr-empty" class="pairing-qr pairing-qr-empty">Loading pairing code...</div>
+                <dl class="pairing-details">
+                    <dt>Computer</dt>
+                    <dd id="pair-name">-</dd>
+                    <dt>Address</dt>
+                    <dd id="pair-address">-</dd>
+                    <dt>Pairing code</dt>
+                    <dd id="pair-code">-</dd>
+                </dl>
+            </div>
+
+            <div id="pair-status" class="pairing-status" role="status" aria-live="polite"></div>
+
+            <button id="pair-regenerate-btn" class="btn-secondary">Regenerate pairing code</button>
+            <div class="label-hint" style="max-width:560px;">
+                Regenerating disconnects every paired phone. They will need to scan the new code.
             </div>
         </div>
 
