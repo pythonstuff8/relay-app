@@ -17,8 +17,13 @@ export const Colors = {
   modeBlind: '#AF52DE',
   modeDeaf: '#0071E3',
   modeMiddleware: '#FF9F0A',
-  modeNavigate: '#34C759',
-  
+  modeRead: '#30B0C7',
+  modePhrases: '#FF6482',
+  modeLoud: '#FFD60A',
+
+  // Dark text for light accent backgrounds (orange, green, yellow) to keep WCAG AA contrast.
+  onAccent: '#111114',
+
   success: '#34C759',
   warning: '#FF9F0A',
   error: '#FF3B30',
@@ -52,11 +57,4 @@ export const Shadows = {
     shadowRadius: 24,
     elevation: 8,
   },
-  glowActive: {
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 4,
-  }
 };

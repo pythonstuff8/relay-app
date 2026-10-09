@@ -1,246 +1,109 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../../constants/theme';
-import { ArrowLeft, BellRing, WifiOff, Wifi } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
+import { BellRing } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { Colors, Typography } from '../../constants/theme';
+import { useBridge } from '../../context/BridgeContext';
+import { sayPrompt, stopSpeaking } from '../../utils/speech';
 
-export default function HapticMirroring() {
-  const router = useRouter();
-  const [ipAddress, setIpAddress] = useState('192.168.1.');
-  const [isConnected, setIsConnected] = useState(false);
-  const [lastAlert, setLastAlert] = useState<string | null>(null);
-  const ws = useRef<WebSocket | null>(null);
+export default function SoundAlertsScreen() {
+  useKeepAwake();
+  const { alerts, status, desktopName } = useBridge();
+  const flash = useRef(new Animated.Value(0)).current;
+  const latestId = alerts[0]?.id;
+  const latestSeverity = alerts[0]?.severity;
 
   useEffect(() => {
-    return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
-    };
+    sayPrompt('Sound alerts. Keep this screen open. Your phone vibrates and flashes when your computer hears an important sound.');
+    return () => stopSpeaking();
   }, []);
 
-  const handleBack = () => {
-    Haptics.selectionAsync();
-    router.back();
-  };
+  useEffect(() => {
+    if (!latestId) return;
+    flash.setValue(1);
+    Animated.timing(flash, { toValue: 0, duration: 1400, useNativeDriver: false }).start();
+  }, [latestId, flash]);
 
-  const connectToMac = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (ws.current) {
-      ws.current.close();
-    }
-
-    try {
-      const socket = new WebSocket(`ws://${ipAddress}:8080`);
-      
-      socket.onopen = () => {
-        setIsConnected(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      };
-
-      socket.onmessage = (e) => {
-        // Real-deal pattern: Mac sends a JSON ping when sound is detected
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === 'ALERT') {
-            setLastAlert(data.message || 'Alert Detected');
-            // Trigger intense haptic pattern for emergency
-            if (data.severity === 'high') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error), 200);
-              setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error), 400);
-            } else {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            }
-          }
-        } catch {
-           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-           setLastAlert(e.data);
-        }
-      };
-
-      socket.onclose = () => {
-        setIsConnected(false);
-      };
-      
-      socket.onerror = (err) => {
-        setIsConnected(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      };
-
-      ws.current = socket;
-    } catch (e) {
-      setIsConnected(false);
-    }
-  };
-
-  const disconnect = () => {
-    if (ws.current) {
-      ws.current.close();
-      ws.current = null;
-    }
-    setIsConnected(false);
-    setLastAlert(null);
-  };
+  const background = flash.interpolate({
+    inputRange: [0, 1],
+    outputRange: [Colors.background, latestSeverity === 'high' ? Colors.error : Colors.modeMiddleware],
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backBtn}>
-          <ArrowLeft color={Colors.white} size={28} />
-        </Pressable>
-        <Text style={styles.title}>Haptic Mirroring</Text>
-      </View>
+    <Animated.View style={{ flex: 1, backgroundColor: background }}>
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Sound Alerts" icon={BellRing} color={Colors.error} />
 
-      {!isConnected ? (
-        <View style={styles.connectionCard}>
-          <WifiOff color={Colors.error} size={48} style={{ marginBottom: 16 }} />
-          <Text style={styles.connectTitle}>Connect to Mac</Text>
-          <Text style={styles.connectDesc}>Enter your Mac's IP address to receive haptic alerts.</Text>
-          
-          <TextInput
-            style={styles.input}
-            value={ipAddress}
-            onChangeText={setIpAddress}
-            placeholder="192.168.1.X"
-            placeholderTextColor={Colors.textSubtle}
-            keyboardType="numbers-and-punctuation"
-          />
-          <Pressable style={styles.connectBtn} onPress={connectToMac}>
-            <Text style={styles.btnText}>Connect</Text>
-          </Pressable>
+        <View style={styles.statusBox}>
+          <Text style={styles.statusText}>
+            {status === 'connected' ? `Listening through ${desktopName || 'your computer'}` : 'Computer not connected'}
+          </Text>
+          <Text style={styles.hint}>Urgent sounds vibrate three times. Others vibrate once.</Text>
         </View>
-      ) : (
-        <View style={styles.activeCard}>
-          <Wifi color={Colors.success} size={48} style={{ marginBottom: 16 }} />
-          <Text style={styles.activeTitle}>Connected & Listening</Text>
-          <Text style={styles.activeDesc}>Your phone will vibrate intensely when the Mac detects important sounds.</Text>
-          
-          {lastAlert && (
-            <View style={styles.alertBox}>
-              <BellRing color={Colors.warning} size={32} />
-              <Text style={styles.alertText}>{lastAlert}</Text>
-            </View>
+
+        <ScrollView contentContainerStyle={{ gap: 10, paddingVertical: 12 }}>
+          {alerts.length === 0 ? (
+            <Text style={styles.empty}>No alerts yet.</Text>
+          ) : (
+            alerts.map((alert) => (
+              <View
+                key={alert.id}
+                style={[styles.alert, alert.severity === 'high' && styles.alertHigh]}
+                accessible
+                accessibilityLabel={`${alert.severity === 'high' ? 'Urgent: ' : ''}${alert.message}, ${new Date(alert.at).toLocaleTimeString()}`}
+              >
+                <Text style={styles.alertText}>{alert.message}</Text>
+                <Text style={styles.alertTime}>{new Date(alert.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
+              </View>
+            ))
           )}
+        </ScrollView>
 
-          <Pressable style={styles.disconnectBtn} onPress={disconnect}>
-            <Text style={styles.btnText}>Disconnect</Text>
-          </Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        <Pressable
+          style={styles.testBtn}
+          onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)}
+          accessibilityRole="button"
+          accessibilityLabel="Test vibration"
+        >
+          <Text style={styles.testText}>Test vibration</Text>
+        </Pressable>
+      </SafeAreaView>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, padding: 24 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 40,
-    marginTop: 12,
-  },
-  backBtn: {
-    padding: 8,
-    marginRight: 16,
+  container: { flex: 1, paddingHorizontal: 16 },
+  statusBox: {
+    padding: 18,
+    borderRadius: 20,
     backgroundColor: Colors.glassSecondary,
-    borderRadius: 16,
-  },
-  title: {
-    color: Colors.white,
-    fontSize: Typography.sizes.title1,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  connectionCard: {
-    backgroundColor: Colors.glassSecondary,
-    padding: 32,
-    borderRadius: 24,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.borderGlassSubtle,
   },
-  connectTitle: {
-    color: Colors.white,
-    fontSize: Typography.sizes.title3,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  connectDesc: {
-    color: Colors.textSubtle,
-    fontSize: Typography.sizes.body,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: Colors.glassTertiary,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    color: Colors.white,
-    fontSize: Typography.sizes.body,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    marginBottom: 24,
-  },
-  connectBtn: {
-    backgroundColor: Colors.modeMiddleware,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  btnText: {
-    color: Colors.white,
-    fontSize: Typography.sizes.headline,
-    fontWeight: '600',
-  },
-  activeCard: {
+  statusText: { color: Colors.white, fontSize: Typography.sizes.title3, fontWeight: '700' },
+  hint: { color: Colors.textSubtle, fontSize: Typography.sizes.body, marginTop: 6 },
+  empty: { color: Colors.textSubtle, fontSize: Typography.sizes.body, textAlign: 'center', marginTop: 24 },
+  alert: {
+    padding: 18,
+    borderRadius: 18,
     backgroundColor: Colors.glassSecondary,
-    padding: 32,
-    borderRadius: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.success,
+    borderLeftWidth: 6,
+    borderLeftColor: Colors.modeMiddleware,
   },
-  activeTitle: {
-    color: Colors.success,
-    fontSize: Typography.sizes.title3,
-    fontWeight: '600',
+  alertHigh: { borderLeftColor: Colors.error, backgroundColor: 'rgba(255,59,48,0.15)' },
+  alertText: { color: Colors.white, fontSize: Typography.sizes.title3, fontWeight: '700' },
+  alertTime: { color: Colors.textSubtle, fontSize: Typography.sizes.body, marginTop: 4 },
+  testBtn: {
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: Colors.glassPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
-  activeDesc: {
-    color: Colors.textSubtle,
-    fontSize: Typography.sizes.body,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  alertBox: {
-    backgroundColor: 'rgba(255, 159, 10, 0.15)',
-    padding: 24,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: Colors.warning,
-  },
-  alertText: {
-    color: Colors.warning,
-    fontSize: Typography.sizes.title3,
-    fontWeight: '700',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  disconnectBtn: {
-    backgroundColor: Colors.glassTertiary,
-    borderWidth: 1,
-    borderColor: Colors.error,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  }
+  testText: { color: Colors.white, fontSize: Typography.sizes.headline, fontWeight: '700' },
 });

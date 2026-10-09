@@ -1,243 +1,229 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../../constants/theme';
-import { ArrowLeft, Mic, WifiOff, Wifi } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+import { Mic, MicOff } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { PermissionNotice } from '../../components/PermissionNotice';
+import { Colors, Typography } from '../../constants/theme';
+import { useBridge, type BridgeMessage } from '../../context/BridgeContext';
+import { ensureMicPermission, MIC_SAMPLE_RATE, pcm16Level, startMicStream, stopMicStream } from '../../utils/audio';
+import { sayPrompt, stopSpeaking } from '../../utils/speech';
 
-export default function RemoteMic() {
-  const router = useRouter();
-  const [ipAddress, setIpAddress] = useState('192.168.1.');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+type MicState = 'idle' | 'starting' | 'streaming';
+
+const REJECTION_MESSAGES: Record<string, string> = {
+  busy: 'Another phone is already the Remote Mic for this computer.',
+  captions_unavailable: 'Your computer could not start captions. Check its internet connection.',
+  unsupported_format: 'Your computer could not use this audio format. Update Relay on your computer.',
+  unsupported_encoding: 'Your computer could not use this audio format. Update Relay on your computer.',
+};
+
+export default function RemoteMicScreen() {
+  useKeepAwake();
+  const { status, desktopName, sendJson, sendBinary, addListener, captions, interimCaption } = useBridge();
+  const [micState, setMicState] = useState<MicState>('idle');
+  const [micDenied, setMicDenied] = useState(false);
+  const [level, setLevel] = useState(-100);
+  const [message, setMessage] = useState('');
+  const micStateRef = useRef<MicState>('idle');
+  const lastLevelRef = useRef(0);
+  const connected = status === 'connected';
+
+  const setState = (next: MicState) => {
+    micStateRef.current = next;
+    setMicState(next);
+  };
+
+  const stopStreaming = useCallback(async (notifyDesktop = true) => {
+    const wasActive = micStateRef.current !== 'idle';
+    micStateRef.current = 'idle';
+    setMicState('idle');
+    setLevel(-100);
+    await stopMicStream();
+    if (wasActive && notifyDesktop) sendJson({ type: 'AUDIO_STOP' });
+  }, [sendJson]);
 
   useEffect(() => {
-    return () => {
-      if (recording) recording.stopAndUnloadAsync();
-    };
-  }, [recording]);
+    sayPrompt('Remote mic. Place your phone near the person speaking, then tap Start. Captions appear on your computer and here.');
+    return () => stopSpeaking();
+  }, []);
 
-  const handleBack = () => {
-    Haptics.selectionAsync();
-    router.back();
-  };
+  useFocusEffect(useCallback(() => () => { stopStreaming(); }, [stopStreaming]));
 
-  const connectToMac = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // Real deal concept: Validate IP and establish connection intent
-    if (ipAddress.length > 8) {
-      setIsConnected(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // Stop if the computer goes away.
+  useEffect(() => {
+    if (!connected && micStateRef.current !== 'idle') {
+      stopStreaming(false);
+      setMessage('Connection to your computer was lost.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-  };
+  }, [connected, stopStreaming]);
 
-  const toggleStreaming = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (isStreaming) {
-      setIsStreaming(false);
+  useEffect(() => addListener(async (msg: BridgeMessage) => {
+    if (msg.type === 'AUDIO_ACK' && micStateRef.current === 'starting') {
       try {
-        if (recording) {
-          await recording.stopAndUnloadAsync();
-          setRecording(null);
-        }
-      } catch (err) {}
-    } else {
-      try {
-        const perm = await Audio.requestPermissionsAsync();
-        if (perm.granted) {
-          await Audio.setAudioModeAsync({
-             allowsRecordingIOS: true,
-             playsInSilentModeIOS: true,
-          });
-          const newRec = new Audio.Recording();
-          await newRec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-          await newRec.startAsync();
-          
-          setRecording(newRec);
-          setIsStreaming(true);
-          // In a full implementation, you'd send blobs over WebSocket
-        }
-      } catch (err) {
-        console.error('Failed to start stream', err);
+        await startMicStream((bytes) => {
+          if (micStateRef.current !== 'streaming') return;
+          sendBinary(bytes.buffer as ArrayBuffer);
+          const now = Date.now();
+          if (now - lastLevelRef.current > 150) {
+            lastLevelRef.current = now;
+            setLevel(pcm16Level(bytes));
+          }
+        });
+        setState('streaming');
+        setMessage('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        sayPrompt('Remote mic is on.');
+      } catch {
+        sendJson({ type: 'AUDIO_STOP' });
+        setState('idle');
+        setMessage('Could not start the microphone.');
       }
+    } else if (msg.type === 'AUDIO_REJECTED') {
+      setState('idle');
+      const reason = String(msg.reason || '');
+      setMessage(REJECTION_MESSAGES[reason] || 'Your computer could not start Remote Mic.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }), [addListener, sendBinary, sendJson]);
+
+  const start = async () => {
+    const granted = await ensureMicPermission();
+    if (!granted) {
+      setMicDenied(true);
+      return;
+    }
+    setMicDenied(false);
+    setMessage('Starting...');
+    setState('starting');
+    const sent = sendJson({ type: 'AUDIO_START', sampleRate: MIC_SAMPLE_RATE, encoding: 'linear16', channels: 1 });
+    if (!sent) {
+      setState('idle');
+      setMessage('Computer not connected.');
+      return;
+    }
+    setTimeout(() => {
+      if (micStateRef.current === 'starting') {
+        setState('idle');
+        setMessage('Your computer did not answer. Make sure Relay is open on it.');
+      }
+    }, 12000);
+  };
+
+  const toggle = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (micStateRef.current === 'idle') start();
+    else {
+      stopStreaming();
+      sayPrompt('Remote mic is off.');
     }
   };
 
-  const disconnect = async () => {
-    if (isStreaming) await toggleStreaming();
-    setIsConnected(false);
-  };
+  const meter = Math.max(0, Math.min(1, (level + 60) / 60));
+  const lastCaptions = captions.slice(-4);
+  const streaming = micState === 'streaming';
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backBtn}>
-          <ArrowLeft color={Colors.white} size={28} />
-        </Pressable>
-        <Text style={styles.title}>Remote Mic</Text>
+      <ScreenHeader title="Remote Mic" icon={Mic} color={Colors.success} textColor={Colors.onAccent} />
+
+      {micDenied ? (
+        <PermissionNotice
+          title="Microphone access needed"
+          message="Remote Mic sends your phone's microphone to your computer for captions. Allow microphone access in Settings."
+          onRetry={start}
+        />
+      ) : null}
+
+      <View style={styles.statusBox}>
+        <Text style={styles.statusText}>
+          {connected
+            ? streaming
+              ? `Sending audio to ${desktopName || 'your computer'}`
+              : `Connected to ${desktopName || 'your computer'}`
+            : 'Computer not connected'}
+        </Text>
+        <View style={styles.meterTrack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <View style={[styles.meterFill, { width: `${meter * 100}%` }]} />
+        </View>
+        {message ? <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text> : null}
       </View>
 
-      {!isConnected ? (
-        <View style={styles.connectionCard}>
-          <WifiOff color={Colors.error} size={48} style={{ marginBottom: 16 }} />
-          <Text style={styles.connectTitle}>Connect to Mac</Text>
-          <Text style={styles.connectDesc}>Enter your Mac's IP address to stream local audio to Relay Mac.</Text>
-          
-          <TextInput
-            style={styles.input}
-            value={ipAddress}
-            onChangeText={setIpAddress}
-            placeholder="192.168.1.X"
-            placeholderTextColor={Colors.textSubtle}
-            keyboardType="numbers-and-punctuation"
-          />
-          <Pressable style={styles.connectBtn} onPress={connectToMac}>
-            <Text style={styles.btnText}>Connect</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.activeCard}>
-          <Wifi color={Colors.success} size={48} style={{ marginBottom: 16 }} />
-          <Text style={styles.activeTitle}>Connected to Mac</Text>
-          <Text style={styles.activeDesc}>Tap the microphone below to begin live audio streaming.</Text>
-          
-          <Pressable 
-            style={[styles.streamBtn, isStreaming && styles.streamBtnActive]} 
-            onPress={toggleStreaming}
-          >
-            <Mic color={isStreaming ? Colors.white : Colors.modeMiddleware} size={48} />
-          </Pressable>
-          <Text style={styles.streamLabel}>
-            {isStreaming ? 'Streaming Live Audio...' : 'Tap to Start Streaming'}
-          </Text>
+      <Text style={styles.section} accessibilityRole="header">Captions from your computer</Text>
+      <ScrollView style={styles.captionBox} contentContainerStyle={{ padding: 16, gap: 8 }}>
+        {lastCaptions.length === 0 && !interimCaption ? (
+          <Text style={styles.empty}>Captions will appear here once people start talking.</Text>
+        ) : null}
+        {lastCaptions.map((caption) => (
+          <Text key={caption.id} style={styles.caption}>{caption.text}</Text>
+        ))}
+        {interimCaption ? <Text style={[styles.caption, { opacity: 0.6 }]}>{interimCaption}</Text> : null}
+      </ScrollView>
 
-          <Pressable style={styles.disconnectBtn} onPress={disconnect}>
-            <Text style={styles.btnText}>Disconnect</Text>
-          </Pressable>
-        </View>
-      )}
+      <Pressable
+        style={[styles.toggleBtn, streaming && styles.toggleBtnOn, (!connected || micState === 'starting') && styles.disabled]}
+        onPress={toggle}
+        disabled={!connected || micState === 'starting'}
+        accessibilityRole="button"
+        accessibilityLabel={streaming ? 'Stop Remote Mic' : 'Start Remote Mic'}
+        accessibilityState={{ selected: streaming, disabled: !connected, busy: micState === 'starting' }}
+      >
+        {streaming ? <MicOff color={Colors.white} size={32} /> : <Mic color={Colors.onAccent} size={32} />}
+        <Text style={[styles.toggleText, !streaming && { color: Colors.onAccent }]}>
+          {streaming ? 'STOP' : micState === 'starting' ? 'STARTING...' : 'START REMOTE MIC'}
+        </Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, padding: 24 },
-  header: {
+  container: { flex: 1, backgroundColor: Colors.background, paddingHorizontal: 16 },
+  statusBox: {
+    padding: 20,
+    borderRadius: 20,
+    backgroundColor: Colors.glassSecondary,
+    borderWidth: 1,
+    borderColor: Colors.borderGlassSubtle,
+    gap: 14,
+  },
+  statusText: { color: Colors.white, fontSize: Typography.sizes.title3, fontWeight: '700' },
+  meterTrack: { height: 20, borderRadius: 10, backgroundColor: Colors.glassTertiary, overflow: 'hidden' },
+  meterFill: { height: '100%', backgroundColor: Colors.success },
+  message: { color: Colors.warning, fontSize: Typography.sizes.body },
+  section: {
+    color: Colors.textSubtle,
+    fontSize: Typography.sizes.caption,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 18,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  captionBox: {
+    flex: 1,
+    borderRadius: 20,
+    backgroundColor: Colors.glassTertiary,
+    borderWidth: 1,
+    borderColor: Colors.borderGlassSubtle,
+  },
+  empty: { color: Colors.textSubtle, fontSize: Typography.sizes.body },
+  caption: { color: Colors.white, fontSize: Typography.sizes.title3, lineHeight: 30 },
+  toggleBtn: {
+    height: 84,
+    borderRadius: 26,
+    backgroundColor: Colors.success,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
-    marginTop: 12,
-  },
-  backBtn: {
-    padding: 8,
-    marginRight: 16,
-    backgroundColor: Colors.glassSecondary,
-    borderRadius: 16,
-  },
-  title: {
-    color: Colors.white,
-    fontSize: Typography.sizes.title1,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  connectionCard: {
-    backgroundColor: Colors.glassSecondary,
-    padding: 32,
-    borderRadius: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.borderGlassSubtle,
-  },
-  connectTitle: {
-    color: Colors.white,
-    fontSize: Typography.sizes.title3,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  connectDesc: {
-    color: Colors.textSubtle,
-    fontSize: Typography.sizes.body,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: Colors.glassTertiary,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    color: Colors.white,
-    fontSize: Typography.sizes.body,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    marginBottom: 24,
-  },
-  connectBtn: {
-    backgroundColor: Colors.modeMiddleware,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  btnText: {
-    color: Colors.white,
-    fontSize: Typography.sizes.headline,
-    fontWeight: '600',
-  },
-  activeCard: {
-    backgroundColor: Colors.glassSecondary,
-    padding: 32,
-    borderRadius: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.borderGlassSubtle,
-  },
-  activeTitle: {
-    color: Colors.success,
-    fontSize: Typography.sizes.title3,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  activeDesc: {
-    color: Colors.textSubtle,
-    fontSize: Typography.sizes.body,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  streamBtn: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: Colors.glassTertiary,
-    borderWidth: 2,
-    borderColor: Colors.modeMiddleware,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    gap: 12,
+    marginVertical: 12,
   },
-  streamBtnActive: {
-    backgroundColor: Colors.error,
-    borderColor: Colors.error,
-    shadowColor: Colors.error,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-  },
-  streamLabel: {
-    color: Colors.white,
-    fontSize: Typography.sizes.headline,
-    fontWeight: '600',
-    marginBottom: 40,
-  },
-  disconnectBtn: {
-    backgroundColor: Colors.glassTertiary,
-    borderWidth: 1,
-    borderColor: Colors.error,
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  }
+  toggleBtnOn: { backgroundColor: Colors.error },
+  toggleText: { color: Colors.white, fontSize: Typography.sizes.title3, fontWeight: '900', letterSpacing: 1 },
+  disabled: { opacity: 0.45 },
 });

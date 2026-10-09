@@ -1,82 +1,82 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../constants/theme';
 import { Globe } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Speech from 'expo-speech';
+import { Colors, Typography } from '../constants/theme';
 import { useLanguage } from '../context/LanguageContext';
-import { getNextLanguage } from '../utils/languages';
-import { playOpenAITTS, stopOpenAISpeech } from '../utils/api';
+import { getNextLanguage, getPreviousLanguage } from '../utils/languages';
+import { isScreenReaderOn, sayPrompt, stopSpeaking } from '../utils/speech';
 
+// Launch screen built for blind users: the whole screen is one control.
+// Without a screen reader: long press cycles language, double tap continues.
+// With VoiceOver/TalkBack: swipe up/down changes language, double tap continues.
 export default function StartupLanguageScreen() {
   const router = useRouter();
-  const { langIndex, setLangIndex, activeLang } = useLanguage();
-
-  const speakInstructions = async (lang: typeof activeLang) => {
-    Speech.stop();
-    await stopOpenAISpeech();
-    
-    const msg = `Welcome to Relay. ${lang.name} selected. Long press anywhere to cycle languages. Double tap anywhere to start.`;
-    
-    if (lang.name === 'English') {
-      Speech.speak(msg, { rate: 1.0, language: lang.tts });
-    } else {
-      // Use OpenAI TTS for highly realistic foreign language preview
-      try {
-        await playOpenAITTS(msg);
-      } catch (e) {
-        // Fallback to local device TTS if offline/failed
-        Speech.speak(msg, { rate: 1.0, language: lang.tts });
-      }
-    }
-  };
+  const { ready, langIndex, setLangIndex, activeLang, hasConsented } = useLanguage();
+  const lastTapRef = useRef(0);
 
   useEffect(() => {
-    speakInstructions(activeLang);
-    return () => { 
-      Speech.stop(); 
-      stopOpenAISpeech();
-    };
-  }, [activeLang]);
+    if (!ready) return;
+    sayPrompt(`Welcome to Relay. ${activeLang.name} selected. Long press anywhere to change language. Double tap anywhere to start.`);
+    return () => stopSpeaking();
+  }, [ready, activeLang.name]);
 
-  const handleLanguageCycle = () => {
+  const changeLanguage = (next: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    const nextIdx = getNextLanguage(langIndex);
-    setLangIndex(nextIdx);
+    setLangIndex(next);
   };
 
-  let lastTap = 0;
-  const handleTap = async () => {
+  const start = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    stopSpeaking();
+    router.replace(hasConsented ? '/home' : '/consent');
+  };
+
+  const handleTap = () => {
+    if (isScreenReaderOn()) {
+      start();
+      return;
+    }
     const now = Date.now();
-    if (now - lastTap < 400) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Speech.stop();
-      await stopOpenAISpeech();
-      
-      const successMsg = `Starting Relay in ${activeLang.name}.`;
-      if (activeLang.name === 'English') {
-         Speech.speak(successMsg, { rate: 1.0, language: activeLang.tts });
-      } else {
-         playOpenAITTS(successMsg).catch(() => Speech.speak(successMsg, { rate: 1.0, language: activeLang.tts }));
-      }
-      router.replace('/home');
+    if (now - lastTapRef.current < 400) {
+      lastTapRef.current = 0;
+      start();
     } else {
-      lastTap = now;
-      speakInstructions(activeLang);
+      lastTapRef.current = now;
     }
   };
+
+  const handleAccessibilityAction = (event: AccessibilityActionEvent) => {
+    switch (event.nativeEvent.actionName) {
+      case 'increment':
+        changeLanguage(getNextLanguage(langIndex));
+        break;
+      case 'decrement':
+        changeLanguage(getPreviousLanguage(langIndex));
+        break;
+      case 'activate':
+        start();
+        break;
+    }
+  };
+
+  if (!ready) return <View style={styles.container} />;
 
   return (
     <SafeAreaView style={styles.container}>
-      <Pressable 
+      <Pressable
         style={styles.massiveButton}
         onPress={handleTap}
-        onLongPress={handleLanguageCycle}
+        onLongPress={() => changeLanguage(getNextLanguage(langIndex))}
         delayLongPress={600}
-        accessibilityRole="button"
-        accessibilityLabel={`Relay Setup. Current language: ${activeLang.name}. Double tap to continue. Long press to change language.`}
+        accessibilityRole="adjustable"
+        accessibilityLabel="Welcome to Relay. Language"
+        accessibilityValue={{ text: activeLang.name }}
+        accessibilityHint="Swipe up or down to change language. Double tap to start."
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }]}
+        onAccessibilityAction={handleAccessibilityAction}
       >
         <Globe color={Colors.white} size={96} style={{ marginBottom: 32 }} />
         <Text style={styles.title}>Welcome to Relay</Text>
@@ -91,7 +91,7 @@ export default function StartupLanguageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.modeBlind,
   },
   massiveButton: {
     flex: 1,
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: Typography.sizes.body,
     fontWeight: '600',
-    opacity: 0.8,
+    opacity: 0.85,
     marginTop: 12,
-  }
+  },
 });

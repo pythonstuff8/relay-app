@@ -1,128 +1,94 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../../constants/theme';
-import { ArrowLeft, Ear, Eye, Hand } from 'lucide-react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { BookOpenText, Ear, Eye, Glasses, Hand, MessageSquareText, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Speech from 'expo-speech';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { MenuStrip } from '../../components/MenuStrip';
+import { Colors } from '../../constants/theme';
+import { sayPrompt, stopSpeaking } from '../../utils/speech';
+
+const FEATURES = [
+  {
+    path: '/standalone/blind',
+    title: 'BLIND MODE',
+    description: 'Hold to ask what is around you',
+    icon: Eye,
+    color: Colors.modeBlind,
+  },
+  {
+    path: '/standalone/read-aloud',
+    title: 'READ ALOUD',
+    description: 'Read signs, menus, and documents',
+    icon: BookOpenText,
+    color: Colors.modeRead,
+  },
+  {
+    path: '/standalone/deaf',
+    title: 'LIVE CAPTIONS',
+    description: 'Captions, translation, type to speak',
+    icon: Ear,
+    color: Colors.modeDeaf,
+  },
+  {
+    path: '/standalone/braille',
+    title: 'BRAILLE',
+    description: 'Braille keyboard and haptic reader',
+    icon: Hand,
+    color: Colors.warning,
+  },
+  {
+    path: '/standalone/phrases',
+    title: 'QUICK PHRASES',
+    description: 'Show or speak ready-made messages',
+    icon: MessageSquareText,
+    color: Colors.modePhrases,
+  },
+  {
+    path: '/standalone/loud-sound',
+    title: 'LOUD SOUND ALERT',
+    description: 'Flash and vibrate on loud sounds',
+    icon: Volume2,
+    color: Colors.modeLoud,
+  },
+] as const;
 
 export default function StandaloneIndex() {
   const router = useRouter();
 
   useEffect(() => {
-    Speech.stop();
-    Speech.speak(
-      'Standalone mode. Top area, Blind Mode. Middle area, Deaf Support. Lower area, Braille Keyboard.',
-      { rate: 1.0 }
+    sayPrompt(
+      'Standalone mode. From top to bottom: Blind mode, Read aloud, Live captions, Braille, Quick phrases, and Loud sound alert.'
     );
-    return () => { Speech.stop(); };
+    return () => stopSpeaking();
   }, []);
-
-  const handleBack = () => {
-    Speech.stop();
-    Haptics.selectionAsync();
-    router.back();
-  };
-
-  const handleFeature = (feature: 'blind' | 'deaf' | 'braille') => {
-    Speech.stop();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push(`/standalone/${feature}`);
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Pressable 
-            onPress={handleBack} 
-            style={styles.backBtn}
-            accessibilityLabel="Go Back. Top left corner."
-            accessibilityRole="button"
-        >
-          <ArrowLeft color={Colors.white} size={36} />
-        </Pressable>
-      </View>
-
-      <Pressable 
-        style={({ pressed }) => [styles.massiveStrip, { backgroundColor: Colors.glassTertiary }, pressed && styles.pressed]}
-        onPress={() => handleFeature('blind')}
-        accessibilityRole="button"
-        accessibilityLabel="Blind Mode. Top of screen."
-      >
-        <Eye color={Colors.modeBlind} size={48} style={styles.icon} />
-        <Text style={styles.cardTitle}>BLIND MODE</Text>
-      </Pressable>
-
-      <View style={styles.divider} />
-
-      <Pressable 
-        style={({ pressed }) => [styles.massiveStrip, { backgroundColor: Colors.glassTertiary }, pressed && styles.pressed]}
-        onPress={() => handleFeature('deaf')}
-        accessibilityRole="button"
-        accessibilityLabel="Deaf Support. Second area."
-      >
-        <Ear color={Colors.modeDeaf} size={42} style={styles.icon} />
-        <Text style={styles.cardTitle}>DEAF SUPPORT</Text>
-      </Pressable>
-
-      <View style={styles.divider} />
-
-      <Pressable 
-        style={({ pressed }) => [styles.massiveStrip, { backgroundColor: Colors.glassTertiary }, pressed && styles.pressed]}
-        onPress={() => handleFeature('braille')}
-        accessibilityRole="button"
-        accessibilityLabel="Braille Keyboard. Lower area."
-      >
-        <Hand color={Colors.warning} size={42} style={styles.icon} />
-        <Text style={styles.cardTitle}>BRAILLE KEYBOARD</Text>
-      </Pressable>
+      <ScreenHeader title="Standalone" icon={Glasses} color={Colors.modeBlind} />
+      <ScrollView contentContainerStyle={styles.list}>
+        {FEATURES.map((feature, index) => (
+          <MenuStrip
+            key={feature.path}
+            title={feature.title}
+            description={feature.description}
+            icon={feature.icon}
+            color={feature.color}
+            accessibilityLabel={`${feature.title.toLowerCase()}. ${feature.description}. Option ${index + 1} of ${FEATURES.length}.`}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              stopSpeaking();
+              router.push(feature.path);
+            }}
+          />
+        ))}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
-    backgroundColor: 'transparent',
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    zIndex: 10,
-  },
-  backBtn: {
-    padding: 16,
-    backgroundColor: Colors.glassSecondary,
-    borderRadius: 24,
-  },
-  massiveStrip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  pressed: {
-    opacity: 0.7,
-    backgroundColor: Colors.glassSecondary,
-  },
-  divider: {
-    height: 4,
-    backgroundColor: Colors.borderGlassSubtle,
-  },
-  icon: {
-    marginRight: 24,
-  },
-  cardTitle: {
-    color: Colors.white,
-    fontSize: Typography.sizes.title2,
-    fontWeight: '800',
-    letterSpacing: 2,
-  }
+  container: { flex: 1, backgroundColor: Colors.background, paddingHorizontal: 16 },
+  list: { flexGrow: 1, gap: 12, paddingBottom: 16 },
 });

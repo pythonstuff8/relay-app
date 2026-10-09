@@ -1,82 +1,107 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../constants/theme';
-import { Glasses, MonitorSmartphone } from 'lucide-react-native';
+import { Glasses, MonitorSmartphone, Settings } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Speech from 'expo-speech';
-import { useLanguage } from '../context/LanguageContext';
+import { Colors, Typography } from '../constants/theme';
+import { useBridge } from '../context/BridgeContext';
+import { sayPrompt, stopSpeaking } from '../utils/speech';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { activeLang } = useLanguage();
+  const { status, desktopName } = useBridge();
+  const connected = status === 'connected';
 
   useEffect(() => {
-    // Stop any previous speech and announce immediately
-    Speech.stop();
-    Speech.speak(`Relay Menu. Top of screen for Standalone Mode with Blind Mode, Deaf Support, and Braille Keyboard. Bottom of screen for Connect to Mac.`, { rate: 1.0, language: activeLang.tts });
-    return () => { Speech.stop(); };
-  }, [activeLang]);
+    sayPrompt('Relay menu. Top half: Standalone mode. Bottom half: Connect to computer. Settings button in the top right corner.');
+    return () => stopSpeaking();
+  }, []);
 
-  const handleSelectMode = (mode: 'standalone' | 'middleware') => {
+  const go = (path: '/standalone' | '/middleware' | '/settings') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Speech.stop();
-    router.push(`/${mode}`);
+    stopSpeaking();
+    router.push(path);
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Pressable 
-        style={({ pressed }) => [styles.massiveCard, { backgroundColor: Colors.glassSecondary }, pressed && styles.pressed]}
-        onPress={() => handleSelectMode('standalone')}
+      <View style={styles.topBar}>
+        <Text style={styles.brand} accessibilityRole="header">Relay</Text>
+        <Pressable
+          onPress={() => go('/settings')}
+          style={styles.settingsBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Settings, privacy, and help"
+          hitSlop={8}
+        >
+          <Settings color={Colors.white} size={26} />
+        </Pressable>
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.massiveCard, pressed && styles.pressed]}
+        onPress={() => go('/standalone')}
         accessibilityRole="button"
-        accessibilityLabel="Standalone Mode. Tap top half of screen to enter."
+        accessibilityLabel="Standalone mode. Blind mode, read aloud, captions, Braille, quick phrases, and loud sound alerts."
       >
         <View style={[styles.iconBox, { backgroundColor: Colors.modeBlind }]}>
           <Glasses color={Colors.white} size={48} />
         </View>
         <Text style={styles.cardTitle}>STANDALONE MODE</Text>
-        <Text style={styles.cardDesc}>Act as your eyes and ears on the go.</Text>
+        <Text style={styles.cardDesc}>Your eyes and ears on the go.</Text>
       </Pressable>
 
       <View style={styles.divider} />
 
-      <Pressable 
-        style={({ pressed }) => [styles.massiveCard, { backgroundColor: Colors.glassSecondary }, pressed && styles.pressed]}
-        onPress={() => handleSelectMode('middleware')}
+      <Pressable
+        style={({ pressed }) => [styles.massiveCard, pressed && styles.pressed]}
+        onPress={() => go('/middleware')}
         accessibilityRole="button"
-        accessibilityLabel="Connect to Mac. Tap bottom half of screen to enter."
+        accessibilityLabel={
+          connected
+            ? `Connect to computer. Connected to ${desktopName || 'your computer'}.`
+            : 'Connect to computer. Pair with the Relay desktop app for alerts, captions, and Remote Mic.'
+        }
       >
         <View style={[styles.iconBox, { backgroundColor: Colors.modeMiddleware }]}>
-          <MonitorSmartphone color={Colors.white} size={48} />
+          <MonitorSmartphone color={Colors.onAccent} size={48} />
         </View>
-        <Text style={styles.cardTitle}>CONNECT TO MAC</Text>
-        <Text style={styles.cardDesc}>Intense haptics when your Mac detects sounds.</Text>
+        <Text style={styles.cardTitle}>CONNECT TO COMPUTER</Text>
+        <Text style={styles.cardDesc}>
+          {connected ? `Connected to ${desktopName || 'your computer'}` : 'Alerts, captions, and Remote Mic.'}
+        </Text>
       </Pressable>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  container: { flex: 1, backgroundColor: Colors.background },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  brand: { color: Colors.white, fontSize: Typography.sizes.title3, fontWeight: '800' },
+  settingsBtn: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: Colors.glassSecondary,
+    borderWidth: 1,
+    borderColor: Colors.borderGlassSubtle,
   },
   massiveCard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+    backgroundColor: Colors.glassSecondary,
   },
-  pressed: {
-    opacity: 0.8,
-    backgroundColor: Colors.glassTertiary,
-  },
-  divider: {
-    height: 4,
-    backgroundColor: Colors.borderGlassSubtle,
-  },
+  pressed: { backgroundColor: Colors.glassPrimary },
+  divider: { height: 4, backgroundColor: Colors.borderGlassSubtle },
   iconBox: {
     width: 96,
     height: 96,
@@ -84,14 +109,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
   },
   cardTitle: {
     color: Colors.white,
-    fontSize: Typography.sizes.title1,
+    fontSize: Typography.sizes.title2,
     fontWeight: '800',
     letterSpacing: 1,
     textAlign: 'center',
@@ -101,7 +122,7 @@ const styles = StyleSheet.create({
     color: Colors.textSubtle,
     fontSize: Typography.sizes.title3,
     textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 30,
     fontWeight: '500',
-  }
+  },
 });

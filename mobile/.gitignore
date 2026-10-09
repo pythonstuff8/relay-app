@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local env (no secrets belong here; the app uses the Relay API proxy)
+.env

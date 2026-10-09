@@ -1,0 +1,150 @@
+diff --git a/node_modules/@saltmango/expo-audio-stream/ios/ExpoPlayAudioStreamModule.swift b/node_modules/@saltmango/expo-audio-stream/ios/ExpoPlayAudioStreamModule.swift
+index 07500ce..eb9b723 100644
+--- a/node_modules/@saltmango/expo-audio-stream/ios/ExpoPlayAudioStreamModule.swift
++++ b/node_modules/@saltmango/expo-audio-stream/ios/ExpoPlayAudioStreamModule.swift
+@@ -408,9 +408,10 @@ public class ExpoPlayAudioStreamModule: Module, AudioStreamManagerDelegate, Micr
+         try audioSession.setCategory(
+             .playAndRecord, mode: .voiceChat,
+             options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+-        if let settings = recordingSettings {
+-            try audioSession.setPreferredSampleRate(settings.sampleRate)
+-            try audioSession.setPreferredIOBufferDuration(1024 / settings.sampleRate)
++        // Keep the hardware sample rate. Forcing 16 kHz can leave the input node unable to
++        // attach on some hardware; the microphone tap resamples to the requested rate.
++        if recordingSettings != nil {
++            try? audioSession.setPreferredIOBufferDuration(0.02)
+         }
+         try audioSession.setActive(true)
+         isAudioSessionInitialized = true
+diff --git a/node_modules/@saltmango/expo-audio-stream/ios/Microphone.swift b/node_modules/@saltmango/expo-audio-stream/ios/Microphone.swift
+index 49ccbba..6958414 100644
+--- a/node_modules/@saltmango/expo-audio-stream/ios/Microphone.swift
++++ b/node_modules/@saltmango/expo-audio-stream/ios/Microphone.swift
+@@ -7,6 +7,7 @@ class Microphone {
+     
+     private var audioEngine: AVAudioEngine!
+     private var audioConverter: AVAudioConverter!
++    private var outputFormat: AVAudioFormat?
+     private var inputNode: AVAudioInputNode!
+     
+     public private(set) var isVoiceProcessingEnabled: Bool = false
+@@ -78,14 +79,20 @@ class Microphone {
+             return StartRecordingResult(error: "Recording is already in progress.")
+         }
+         
+-        if self.audioEngine == nil {
+-            self.audioEngine = AVAudioEngine()
++        // Other audio code (speech playback) may have changed or deactivated the session.
++        let activeSession = AVAudioSession.sharedInstance()
++        if activeSession.category != .playAndRecord {
++            try? activeSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+         }
++        try? activeSession.setActive(true)
+ 
+-        if self.audioEngine != nil && audioEngine.isRunning  {
+-            Logger.debug("Debug: Audio engine already running.")
+-            audioEngine.stop()
++        // A fresh engine picks up the current hardware configuration; a reused one can
++        // report a stale input format after the audio session or route changes.
++        if let previous = self.audioEngine {
++            if previous.isRunning { previous.stop() }
++            previous.inputNode.removeTap(onBus: 0)
+         }
++        self.audioEngine = AVAudioEngine()
+        
+         var newSettings = settings  // Make settings mutable
+         
+@@ -116,18 +123,25 @@ class Microphone {
+         
+         recordingSettings = newSettings  // Update the class property with the new settings
+         
+-        // Correct the format to use 16-bit integer (PCM)
+-        guard let audioFormat = AVAudioFormat(commonFormat: commonFormat, sampleRate: newSettings.sampleRate, channels: UInt32(newSettings.numberOfChannels), interleaved: true) else {
+-            Logger.debug("Error: Failed to create audio format with the specified bit depth.")
+-            return StartRecordingResult(error: "Error: Failed to create audio format with the specified bit depth.")
++        // Tap in the input node's own format (any other format can throw "Failed to create
++        // tap due to format mismatch") and convert each buffer to mono Int16 at the
++        // requested rate with a persistent AVAudioConverter.
++        let inputFormat = audioEngine.inputNode.outputFormat(forBus: 0)
++        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
++            return StartRecordingResult(error: "Error: Microphone input is unavailable.")
+         }
+-        
+-        audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: audioFormat) { [weak self] (buffer, time) in
+-            guard let self = self else {
+-                Logger.debug("Error: File URL or self is nil during buffer processing.")
+-                return
+-            }
+-            
++        let targetRate = newSettings.desiredSampleRate > 0 ? newSettings.desiredSampleRate : inputFormat.sampleRate
++        guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: targetRate, channels: 1, interleaved: true) else {
++            return StartRecordingResult(error: "Error: Failed to create the output audio format.")
++        }
++        self.audioConverter = nil
++        self.outputFormat = targetFormat
++        newSettings.sampleRate = targetRate
++        recordingSettings = newSettings
++
++        // format: nil always matches the live hardware format, so the tap cannot mismatch.
++        audioEngine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] (buffer, time) in
++            guard let self = self else { return }
+             self.processAudioBuffer(buffer)
+             self.lastBufferTime = time
+         }
+@@ -172,30 +186,33 @@ class Microphone {
+     ///   - buffer: The audio buffer to process.
+     ///   - fileURL: The URL of the file to write the data to.
+     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+-        let targetSampleRate = recordingSettings?.desiredSampleRate ?? buffer.format.sampleRate
+-        let finalBuffer: AVAudioPCMBuffer
+-               
+-        
+-        if buffer.format.sampleRate != targetSampleRate {
+-            // Resample the audio buffer if the target sample rate is different from the input sample rate
+-            if let resampledBuffer = AudioUtils.resampleAudioBuffer(buffer, from: buffer.format.sampleRate, to: targetSampleRate) {
+-                finalBuffer = resampledBuffer
+-            } else {
+-                if let convertedBuffer = AudioUtils.tryConvertToFormat(
+-                    inputBuffer: buffer,
+-                    desiredSampleRate: targetSampleRate,
+-                    desiredChannel: 1,
+-                    bitDepth: recordingSettings?.bitDepth ?? 16
+-                ) {
+-                    finalBuffer = convertedBuffer
+-                } else {
+-                    Logger.debug("Failed to convert to desired format.")
+-                    finalBuffer = buffer
+-                }
++        guard let targetFormat = outputFormat else { return }
++        if audioConverter == nil || audioConverter.inputFormat != buffer.format {
++            guard let newConverter = AVAudioConverter(from: buffer.format, to: targetFormat) else {
++                Logger.debug("Audio conversion unavailable for \(buffer.format)")
++                return
++            }
++            audioConverter = newConverter
++        }
++        let converter: AVAudioConverter = audioConverter
++        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
++        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
++        guard let finalBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
++
++        var consumed = false
++        var conversionError: NSError?
++        let status = converter.convert(to: finalBuffer, error: &conversionError) { _, inputStatus in
++            if consumed {
++                inputStatus.pointee = .noDataNow
++                return nil
+             }
+-        } else {
+-            // Use the original buffer if the sample rates are the same
+-            finalBuffer = buffer
++            consumed = true
++            inputStatus.pointee = .haveData
++            return buffer
++        }
++        if status == .error || finalBuffer.frameLength == 0 {
++            Logger.debug("Audio conversion failed: \(conversionError?.localizedDescription ?? "no output")")
++            return
+         }
+ 
+         let powerLevel: Float = AudioUtils.calculatePowerLevel(from: finalBuffer)

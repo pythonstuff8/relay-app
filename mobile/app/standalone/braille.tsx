@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, PanResponder, Dimensions } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, PanResponder, type AccessibilityActionEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography } from '../../constants/theme';
-import { ArrowLeft, Hand, Volume2, Vibrate } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { Hand, Volume2, Vibrate } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Speech from 'expo-speech';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { Colors, Typography } from '../../constants/theme';
+import { sayPrompt, speakAloud, stopSpeaking } from '../../utils/speech';
 
 // ─── COMPLETE GRADE-1 BRAILLE MAPPING ───
 // Standard 6-dot cell: [1,2,3,4,5,6] → dots in columns (left: 1-2-3, right: 4-5-6)
@@ -50,6 +50,7 @@ async function playBrailleCell(dots: number[], speed: number = 1.0) {
   for (let i = 0; i < dots.length; i++) {
     if (dots[i] === 1) {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await sleep(dotOn); // Raised dots linger so they feel distinct from flat ones.
     } else {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -80,23 +81,36 @@ async function playWordHaptic(word: string, speed: number = 1.0) {
 }
 
 // ─── COMPONENT ───
-const { width: SCREEN_W } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 50;
+const PRACTICE_TEXT = 'welcome to relay';
 
 export default function BrailleMode() {
-  const router = useRouter();
-
   // Braille Input State
   const [dots, setDots] = useState([false, false, false, false, false, false]);
   const [typedText, setTypedText] = useState('');
 
   // Haptic Reader State
   const [readerMode, setReaderMode] = useState(false);
-  const [readerText, setReaderText] = useState('hello world');
+  const [readerText, setReaderText] = useState(PRACTICE_TEXT);
   const [charIndex, setCharIndex] = useState(0);
   const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>('both');
   const [speed, setSpeed] = useState(1.0);
   const playingRef = useRef(false);
+
+  // The swipe handler is created once, so it reads live values through refs.
+  const readerTextRef = useRef(readerText);
+  const charIndexRef = useRef(charIndex);
+  const feedbackModeRef = useRef(feedbackMode);
+  const speedRef = useRef(speed);
+  useEffect(() => { readerTextRef.current = readerText; }, [readerText]);
+  useEffect(() => { charIndexRef.current = charIndex; }, [charIndex]);
+  useEffect(() => { feedbackModeRef.current = feedbackMode; }, [feedbackMode]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+
+  useEffect(() => {
+    sayPrompt('Braille. Input mode is on. Six dots are in two columns: dots 1 to 3 on the left, 4 to 6 on the right. Press Enter to add the letter.');
+    return () => stopSpeaking();
+  }, []);
 
   // ─── Braille Input ───
   const toggleDot = (index: number) => {
@@ -111,58 +125,69 @@ export default function BrailleMode() {
   const submitCharacter = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const key = dots.map(d => (d ? '1' : '0')).join('');
-    const char = BRAILLE_INPUT[key] || '?';
-    setTypedText(prev => prev + char);
-    if (feedbackMode !== 'haptic') {
-      Speech.speak(char === '?' ? 'Unknown' : char === ' ' ? 'Space' : char);
+    const char = BRAILLE_INPUT[key];
+    if (!char) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (feedbackMode !== 'haptic') sayPrompt('Unknown pattern');
+      return;
     }
+    setTypedText(prev => prev + char);
+    if (feedbackMode !== 'haptic') sayPrompt(char === ' ' ? 'Space' : char);
     setDots([false, false, false, false, false, false]);
   };
 
   const deleteChar = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setTypedText(prev => prev.slice(0, -1));
-    if (feedbackMode !== 'haptic') Speech.speak('Deleted');
+    if (feedbackMode !== 'haptic') sayPrompt('Deleted');
   };
 
   const speakAll = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Speech.speak(typedText || 'Nothing typed yet');
+    speakAloud(typedText || 'Nothing typed yet', 'en-US');
   };
 
   // ─── Haptic Reader ───
-  const emitCharacter = useCallback(async (text: string, idx: number) => {
+  const emitCharacter = useCallback(async (idx: number) => {
+    const text = readerTextRef.current;
     if (idx < 0 || idx >= text.length) return;
     const char = text[idx];
-    if (feedbackMode === 'haptic' || feedbackMode === 'both') {
-      await playCharacterHaptic(char, speed);
+    const mode = feedbackModeRef.current;
+    if (mode === 'voice' || mode === 'both') {
+      sayPrompt(char === ' ' ? 'Space' : char);
     }
-    if (feedbackMode === 'voice' || feedbackMode === 'both') {
-      Speech.speak(char === ' ' ? 'Space' : char);
+    if (mode === 'haptic' || mode === 'both') {
+      await playCharacterHaptic(char, speedRef.current);
     }
-  }, [feedbackMode, speed]);
+  }, []);
+
+  const moveTo = useCallback((idx: number) => {
+    const text = readerTextRef.current;
+    if (!text) return;
+    const next = Math.max(0, Math.min(idx, text.length - 1));
+    charIndexRef.current = next;
+    setCharIndex(next);
+    emitCharacter(next);
+  }, [emitCharacter]);
 
   const handleLongPressWord = useCallback(async () => {
     if (playingRef.current) return;
+    const text = readerTextRef.current;
+    if (!text) return;
     playingRef.current = true;
-    const text = readerText || typedText;
-    if (!text) { playingRef.current = false; return; }
 
     // Find current word boundaries
-    let start = charIndex;
-    let end = charIndex;
+    let start = charIndexRef.current;
+    let end = charIndexRef.current;
     while (start > 0 && text[start - 1] !== ' ') start--;
     while (end < text.length && text[end] !== ' ') end++;
     const word = text.slice(start, end);
 
-    if (feedbackMode === 'haptic' || feedbackMode === 'both') {
-      await playWordHaptic(word, speed);
-    }
-    if (feedbackMode === 'voice' || feedbackMode === 'both') {
-      Speech.speak(word);
-    }
+    const mode = feedbackModeRef.current;
+    if (mode === 'voice' || mode === 'both') sayPrompt(word);
+    if (mode === 'haptic' || mode === 'both') await playWordHaptic(word, speedRef.current);
     playingRef.current = false;
-  }, [readerText, typedText, charIndex, feedbackMode, speed]);
+  }, []);
 
   // ─── Gesture Handler ───
   const panResponder = useRef(
@@ -170,110 +195,126 @@ export default function BrailleMode() {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderRelease: (_, gesture) => {
-        const text = readerText || typedText;
-        if (!text) return;
-
         if (Math.abs(gesture.dx) < SWIPE_THRESHOLD && Math.abs(gesture.dy) < SWIPE_THRESHOLD) {
-          // Tap — repeat current
-          setCharIndex(prev => {
-            const idx = Math.min(prev, text.length - 1);
-            emitCharacter(text, idx);
-            return idx;
-          });
+          moveTo(charIndexRef.current); // Tap: repeat current
         } else if (gesture.dx > SWIPE_THRESHOLD) {
-          // Swipe right → next character
-          setCharIndex(prev => {
-            const next = Math.min(prev + 1, text.length - 1);
-            emitCharacter(text, next);
-            return next;
-          });
+          moveTo(charIndexRef.current + 1); // Swipe right: next
         } else if (gesture.dx < -SWIPE_THRESHOLD) {
-          // Swipe left → previous character
-          setCharIndex(prev => {
-            const next = Math.max(prev - 1, 0);
-            emitCharacter(text, next);
-            return next;
-          });
+          moveTo(charIndexRef.current - 1); // Swipe left: previous
         }
       },
     })
   ).current;
 
-  const handleBack = () => {
-    Speech.stop();
-    Haptics.selectionAsync();
-    router.back();
+  const handleReaderAccessibilityAction = (event: AccessibilityActionEvent) => {
+    switch (event.nativeEvent.actionName) {
+      case 'increment':
+        moveTo(charIndexRef.current + 1);
+        break;
+      case 'decrement':
+        moveTo(charIndexRef.current - 1);
+        break;
+      case 'activate':
+        moveTo(charIndexRef.current);
+        break;
+      case 'longpress':
+        handleLongPressWord();
+        break;
+    }
   };
 
   const cycleFeedbackMode = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setFeedbackMode(prev => {
-      const next = prev === 'both' ? 'haptic' : prev === 'haptic' ? 'voice' : 'both';
-      Speech.speak(`Mode: ${next === 'both' ? 'Voice and Haptic' : next === 'haptic' ? 'Haptic only' : 'Voice only'}`);
-      return next;
-    });
+    const next: FeedbackMode = feedbackMode === 'both' ? 'haptic' : feedbackMode === 'haptic' ? 'voice' : 'both';
+    setFeedbackMode(next);
+    sayPrompt(`Mode: ${next === 'both' ? 'Voice and haptic' : next === 'haptic' ? 'Haptic only' : 'Voice only'}`);
   };
 
   const cycleSpeed = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSpeed(prev => {
-      const next = prev >= 2.0 ? 0.5 : prev + 0.5;
-      Speech.speak(`Speed ${next}x`);
-      return next;
-    });
+    const next = speed >= 2.0 ? 0.5 : speed + 0.5;
+    setSpeed(next);
+    sayPrompt(`Speed ${next}x`);
   };
 
-  const activeText = readerText || typedText;
-  const currentChar = activeText?.[charIndex] || '';
+  const enterInputMode = () => {
+    setReaderMode(false);
+    sayPrompt('Input mode');
+  };
+
+  const enterReaderMode = () => {
+    const text = typedText || PRACTICE_TEXT;
+    setReaderMode(true);
+    setReaderText(text);
+    readerTextRef.current = text;
+    setCharIndex(0);
+    charIndexRef.current = 0;
+    sayPrompt(
+      typedText
+        ? 'Reader mode. Reading what you typed. Swipe right for next character, left for previous. Hold the button below for the full word.'
+        : 'Reader mode with practice text. Swipe right for next character, left for previous. Hold the button below for the full word.'
+    );
+  };
+
+  const currentChar = readerText[charIndex] || '';
+  const feedbackLabel = feedbackMode === 'both' ? 'Voice and haptic' : feedbackMode === 'haptic' ? 'Haptic only' : 'Voice only';
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backBtn} accessibilityLabel="Go back">
-          <ArrowLeft color={Colors.white} size={28} />
-        </Pressable>
-        <View style={styles.headerRight}>
-          <Pressable onPress={cycleFeedbackMode} style={styles.modeBadge} accessibilityLabel={`Feedback mode: ${feedbackMode}`}>
-            {feedbackMode === 'haptic' ? <Vibrate color={Colors.white} size={16} /> : <Volume2 color={Colors.white} size={16} />}
-            <Text style={styles.modeText}>{feedbackMode === 'both' ? 'V+H' : feedbackMode === 'haptic' ? 'HAP' : 'VOC'}</Text>
-          </Pressable>
-          <Pressable onPress={cycleSpeed} style={styles.speedBadge} accessibilityLabel={`Speed ${speed}x`}>
-            <Text style={styles.modeText}>{speed}x</Text>
-          </Pressable>
-          <View style={styles.indicatorBox}>
-            <Hand color={Colors.white} size={18} style={{ marginRight: 6 }} />
-            <Text style={styles.title}>Braille</Text>
-          </View>
-        </View>
-      </View>
+      <ScreenHeader
+        title="Braille"
+        icon={Hand}
+        color={Colors.warning}
+        textColor={Colors.onAccent}
+        right={
+          <>
+            <Pressable
+              onPress={cycleFeedbackMode}
+              style={styles.modeBadge}
+              accessibilityRole="button"
+              accessibilityLabel={`Feedback: ${feedbackLabel}. Tap to change.`}
+            >
+              {feedbackMode === 'haptic' ? <Vibrate color={Colors.white} size={16} /> : <Volume2 color={Colors.white} size={16} />}
+              <Text style={styles.modeText}>{feedbackMode === 'both' ? 'V+H' : feedbackMode === 'haptic' ? 'HAP' : 'VOC'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={cycleSpeed}
+              style={styles.speedBadge}
+              accessibilityRole="button"
+              accessibilityLabel={`Haptic speed ${speed}x. Tap to change.`}
+            >
+              <Text style={styles.modeText}>{speed}x</Text>
+            </Pressable>
+          </>
+        }
+      />
 
       {/* Toggle: Input vs Reader */}
-      <View style={styles.toggleBar}>
+      <View style={styles.toggleBar} accessibilityRole="tablist">
         <Pressable
           style={[styles.toggleBtn, !readerMode && styles.toggleActive]}
-          onPress={() => { setReaderMode(false); Speech.speak('Input mode'); }}
+          onPress={enterInputMode}
+          accessibilityRole="tab"
+          accessibilityLabel="Input mode"
+          accessibilityState={{ selected: !readerMode }}
         >
           <Text style={[styles.toggleText, !readerMode && styles.toggleTextActive]}>INPUT</Text>
         </Pressable>
         <Pressable
           style={[styles.toggleBtn, readerMode && styles.toggleActive]}
-          onPress={() => {
-            setReaderMode(true);
-            setReaderText(typedText || 'hello world');
-            setCharIndex(0);
-            Speech.speak('Reader mode. Swipe right for next character. Swipe left for previous. Long press for full word.');
-          }}
+          onPress={enterReaderMode}
+          accessibilityRole="tab"
+          accessibilityLabel="Reader mode"
+          accessibilityState={{ selected: readerMode }}
         >
           <Text style={[styles.toggleText, readerMode && styles.toggleTextActive]}>READER</Text>
         </Pressable>
       </View>
 
-      {/* Content */}
       {!readerMode ? (
         <>
           {/* Text Display */}
-          <View style={styles.textDisplay}>
+          <View style={styles.textDisplay} accessible accessibilityLabel={typedText ? `Typed text: ${typedText}` : 'Nothing typed yet'}>
             <Text style={styles.typedText}>{typedText || 'Start typing...'}</Text>
           </View>
 
@@ -285,7 +326,9 @@ export default function BrailleMode() {
                   key={i}
                   style={[styles.dot, dots[i] && styles.dotActive]}
                   onPress={() => toggleDot(i)}
-                  accessibilityLabel={`Dot ${i + 1}, ${dots[i] ? 'raised' : 'flat'}`}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Dot ${i + 1}`}
+                  accessibilityState={{ checked: dots[i] }}
                 />
               ))}
             </View>
@@ -295,7 +338,9 @@ export default function BrailleMode() {
                   key={i}
                   style={[styles.dot, dots[i] && styles.dotActive]}
                   onPress={() => toggleDot(i)}
-                  accessibilityLabel={`Dot ${i + 1}, ${dots[i] ? 'raised' : 'flat'}`}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Dot ${i + 1}`}
+                  accessibilityState={{ checked: dots[i] }}
                 />
               ))}
             </View>
@@ -303,14 +348,14 @@ export default function BrailleMode() {
 
           {/* Controls */}
           <View style={styles.controls}>
-            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.error }]} onPress={deleteChar}>
+            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.error }]} onPress={deleteChar} accessibilityRole="button" accessibilityLabel="Delete last letter">
               <Text style={styles.btnText}>Delete</Text>
             </Pressable>
-            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.modeBlind }]} onPress={speakAll}>
+            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.modeBlind }]} onPress={speakAll} accessibilityRole="button" accessibilityLabel="Speak typed text">
               <Text style={styles.btnText}>Speak</Text>
             </Pressable>
-            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.success }]} onPress={submitCharacter}>
-              <Text style={styles.btnText}>Enter</Text>
+            <Pressable style={[styles.controlBtn, { backgroundColor: Colors.success }]} onPress={submitCharacter} accessibilityRole="button" accessibilityLabel="Enter letter from selected dots">
+              <Text style={[styles.btnText, { color: Colors.onAccent }]}>Enter</Text>
             </Pressable>
           </View>
         </>
@@ -318,14 +363,14 @@ export default function BrailleMode() {
         <>
           {/* Haptic Reader Zone */}
           <View style={styles.readerInfo}>
-            <Text style={styles.readerLabel}>Reading:</Text>
-            <Text style={styles.readerFullText}>{activeText}</Text>
+            <Text style={styles.readerLabel}>{readerText === PRACTICE_TEXT && !typedText ? 'Practice text:' : 'Reading:'}</Text>
+            <Text style={styles.readerFullText}>{readerText}</Text>
           </View>
 
-          <View style={styles.readerCharDisplay}>
+          <View style={styles.readerCharDisplay} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             <Text style={styles.readerCharLabel}>Current Character</Text>
             <Text style={styles.readerChar}>{currentChar === ' ' ? '⎵' : currentChar.toUpperCase()}</Text>
-            <Text style={styles.readerPosition}>{charIndex + 1} / {activeText.length}</Text>
+            <Text style={styles.readerPosition}>{charIndex + 1} / {readerText.length}</Text>
 
             {/* Dot visualization */}
             <View style={styles.dotPreview}>
@@ -335,13 +380,32 @@ export default function BrailleMode() {
             </View>
           </View>
 
-          {/* Gesture surface */}
-          <View style={styles.gestureZone} {...panResponder.panHandlers}>
+          {/* Gesture surface: swipes without a screen reader, adjustable control with one */}
+          <View
+            style={styles.gestureZone}
+            {...panResponder.panHandlers}
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel="Braille reader"
+            accessibilityValue={{ text: `${currentChar === ' ' ? 'space' : currentChar}, character ${charIndex + 1} of ${readerText.length}` }}
+            accessibilityHint="Swipe up for next character, down for previous. Double tap to repeat."
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }, { name: 'longpress' }]}
+            onAccessibilityAction={handleReaderAccessibilityAction}
+          >
             <Text style={styles.gestureHint}>← Swipe to Navigate →</Text>
-            <Text style={styles.gestureSubHint}>Tap to repeat • Long press for word</Text>
+            <Text style={styles.gestureSubHint}>Tap to repeat</Text>
           </View>
 
-          <Pressable style={styles.longPressBtn} onLongPress={handleLongPressWord} delayLongPress={600}>
+          <Pressable
+            style={styles.longPressBtn}
+            onLongPress={handleLongPressWord}
+            delayLongPress={600}
+            accessibilityRole="button"
+            accessibilityLabel="Play full word"
+            accessibilityHint="Long press to feel and hear the whole current word"
+            accessibilityActions={[{ name: 'activate' }, { name: 'longpress' }]}
+            onAccessibilityAction={() => handleLongPressWord()}
+          >
             <Text style={styles.longPressBtnText}>HOLD FOR FULL WORD</Text>
           </Pressable>
         </>
@@ -352,20 +416,6 @@ export default function BrailleMode() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background, padding: 16 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, marginTop: 8,
-  },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  backBtn: {
-    padding: 12, backgroundColor: Colors.glassSecondary, borderRadius: 20,
-    borderWidth: 1, borderColor: Colors.borderGlassSubtle,
-  },
-  indicatorBox: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.warning,
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-  },
-  title: { color: Colors.white, fontSize: Typography.sizes.body, fontWeight: '700' },
   modeBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.glassTertiary, paddingHorizontal: 10, paddingVertical: 6,
@@ -385,7 +435,7 @@ const styles = StyleSheet.create({
   toggleBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   toggleActive: { backgroundColor: Colors.warning },
   toggleText: { color: Colors.textSubtle, fontWeight: '700', fontSize: 14, letterSpacing: 1 },
-  toggleTextActive: { color: Colors.white },
+  toggleTextActive: { color: Colors.onAccent },
 
   // Input mode
   textDisplay: {
@@ -461,6 +511,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 12,
   },
   longPressBtnText: {
-    color: Colors.white, fontSize: 16, fontWeight: '800', letterSpacing: 2,
+    color: Colors.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 2,
   },
 });
