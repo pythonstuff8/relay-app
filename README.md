@@ -1,8 +1,11 @@
 # Relay
 
-Relay is a desktop accessibility app.
+Relay is an accessibility app for desktop and mobile.
 
-It gives live captions, sound alerts, voice commands, and optional sign-language camera input.
+It gives live captions, sound alerts, voice commands, and optional gesture camera input on the desktop,
+plus a companion phone app for iOS and Android.
+
+Website: https://relay.suhaanthayyil.com
 
 ## For Judges
 
@@ -39,6 +42,14 @@ Windows may show SmartScreen. Click **More info** then **Run anyway**.
 - AI Guide with step-by-step help
 - Meeting transcripts and summaries
 - Text to speech output
+- Phone pairing by QR code: sound alerts on your phone, caption mirror, and Remote Mic
+
+## Mobile App
+
+The phone app lives in `mobile/` (Expo). See `mobile/README.md`.
+
+- Standalone: Blind Mode, Read Aloud, Live Captions with translation, Braille, Quick Phrases, Loud Sound Alert
+- With the desktop app: Sound Alerts, Caption Mirror, Remote Mic
 
 ## Build From Source
 
@@ -56,12 +67,15 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` and add your keys:
+Installed builds need no keys. They reach OpenAI and Deepgram through the Relay API proxy
+(`website/api/`). For local development you can optionally add your own keys to `.env`:
 
 ```env
 DEEPGRAM_API_KEY=your_deepgram_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+Keys in `.env` are only used by `npm start` and are never packaged into installers.
 
 ### Run
 
@@ -75,21 +89,22 @@ npm start
 npm run build
 ```
 
-## API Keys and Features
+## AI Services
 
-If keys are missing, Relay still starts.
+- Without local keys (and in every installer), AI features use the Relay API at `https://relay.suhaanthayyil.com/api`.
+- Set `RELAY_API_BASE` to use a different deployment, or `RELAY_FORCE_PROXY=1` to test the proxy while local keys are present.
+- If the service is unreachable, captions fall back to the offline Whisper engine.
 
-Cloud features will be limited until keys are added.
-
-- Missing `DEEPGRAM_API_KEY`: no Deepgram live transcription
-- Missing `OPENAI_API_KEY`: AI Guide, TTS AI voice, and some AI features are unavailable
+The proxy needs `OPENAI_API_KEY` and `DEEPGRAM_API_KEY` set as Vercel environment variables.
+The Deepgram key must have the Member role (required to issue temporary tokens).
 
 ## Project Layout
 
 - `electron/` main process and IPC
 - `renderer/` overlay UI and feature modules
 - `assets/` icons, sounds, models
-- `website/` public download site
+- `website/` public site (Vite + React) and the Relay API proxy (`website/api/`)
+- `mobile/` iOS and Android app (Expo)
 - `scripts/` verification scripts
 
 ## Verify
