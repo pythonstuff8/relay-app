@@ -12,7 +12,6 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.suhaan.relay",
-      "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -59,7 +58,6 @@
     },
     "android": {
       "package": "com.suhaan.relay",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#D2DCF8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
