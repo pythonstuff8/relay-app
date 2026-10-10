@@ -41,6 +41,10 @@ ON YOUR PHONE
 - Blind Mode: hold the screen, ask a question, and hear what is in front of you, with directions like "door at 2 o'clock".
 - Read Aloud: point the camera at a sign, menu, label, or page and Relay reads it to you, translated if you need.
 - Live Captions: large, real-time captions of the conversation around you, with optional translation into another language, and type-to-speak so you can answer out loud.
+- Name Alert: your phone vibrates and highlights the caption when someone says your name.
+- Catch Me Up: one tap summarizes what you missed, including anything asked of you.
+- Conversation: lay the phone between you and another person for a face-to-face chat, translated both ways.
+- Quick Ask: one-tap help to identify money, colors, expiry dates, and signs.
 - Braille: a six-dot Braille keyboard and a haptic Braille reader you can feel through vibration.
 - Quick Phrases: show or speak ready-made messages like "I am Deaf, please write it down." Add your own.
 - Loud Sound Alert: your phone flashes and vibrates when it hears a loud sound. Runs fully on your phone.

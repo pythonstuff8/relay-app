@@ -11,6 +11,7 @@ export type Prefs = {
   translateTo: number | null;
   captionScale: number;
   loudSensitivity: 'low' | 'medium' | 'high';
+  alertKeywords: string[];
 };
 
 const DEFAULT_PREFS: Prefs = {
@@ -19,6 +20,7 @@ const DEFAULT_PREFS: Prefs = {
   translateTo: null,
   captionScale: 1,
   loudSensitivity: 'medium',
+  alertKeywords: [],
 };
 
 type PrefsContextType = {

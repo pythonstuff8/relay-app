@@ -1,5 +1,5 @@
-import React from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
@@ -10,6 +10,7 @@ import { Links } from '../constants/links';
 import { useLanguage } from '../context/LanguageContext';
 import { useBridge } from '../context/BridgeContext';
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
+import { parseKeywords } from '../utils/keywords';
 
 function LinkRow({ label, url, hint }: { label: string; url: string; hint: string }) {
   return (
@@ -27,7 +28,19 @@ function LinkRow({ label, url, hint }: { label: string; url: string; hint: strin
 }
 
 export default function SettingsScreen() {
-  const { langIndex, setLangIndex } = useLanguage();
+  const { langIndex, setLangIndex, prefs, updatePrefs } = useLanguage();
+  const [keywordDraft, setKeywordDraft] = useState(prefs.alertKeywords.join(', '));
+
+  useEffect(() => {
+    setKeywordDraft(prefs.alertKeywords.join(', '));
+  }, [prefs.alertKeywords]);
+
+  const saveKeywords = () => {
+    const keywords = parseKeywords(keywordDraft);
+    updatePrefs({ alertKeywords: keywords });
+    setKeywordDraft(keywords.join(', '));
+    Haptics.selectionAsync();
+  };
   const { pairing, desktopName, forget } = useBridge();
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -57,6 +70,23 @@ export default function SettingsScreen() {
           })}
         </View>
         <Text style={styles.hint}>Used for captions, spoken answers, and Read Aloud.</Text>
+
+        <Text style={styles.section} accessibilityRole="header">Name Alert</Text>
+        <TextInput
+          style={styles.input}
+          value={keywordDraft}
+          onChangeText={setKeywordDraft}
+          onEndEditing={saveKeywords}
+          onSubmitEditing={saveKeywords}
+          placeholder="Your name, nickname"
+          placeholderTextColor={Colors.textSubtle}
+          autoCorrect={false}
+          returnKeyType="done"
+          accessibilityLabel="Name Alert words, separated by commas"
+        />
+        <Text style={styles.hint}>
+          When these words are said, Relay vibrates and highlights the caption. Separate words with commas.
+        </Text>
 
         <Text style={styles.section} accessibilityRole="header">Paired computer</Text>
         {pairing ? (
@@ -115,6 +145,16 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: Colors.white, borderColor: Colors.white },
   chipText: { color: Colors.white, fontSize: Typography.sizes.body, fontWeight: '600' },
   chipTextSelected: { color: Colors.onAccent },
+  input: {
+    height: 56,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    color: Colors.white,
+    fontSize: Typography.sizes.body,
+    backgroundColor: Colors.glassSecondary,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
   hint: { color: Colors.textSubtle, fontSize: Typography.sizes.body, marginTop: 8, lineHeight: 22 },
   card: {
     padding: 18,

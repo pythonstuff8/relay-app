@@ -16,6 +16,9 @@ import * as Haptics from 'expo-haptics';
 import { Ear, Languages, Mic, MicOff, Volume2 } from 'lucide-react-native';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { PermissionNotice } from '../../components/PermissionNotice';
+import { HighlightedText, NameAlertBanner, useNameAlert } from '../../components/NameAlert';
+import { CatchUpButton } from '../../components/CatchUp';
+import { findKeyword } from '../../utils/keywords';
 import { Colors, Typography } from '../../constants/theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { translateCaption } from '../../utils/ai';
@@ -41,10 +44,16 @@ export default function DeafMode() {
   const scrollRef = useRef<ScrollView>(null);
   const idRef = useRef(0);
   const translateToRef = useRef<number | null>(prefs.translateTo);
+  const keywordsRef = useRef<string[]>(prefs.alertKeywords);
+  const nameAlert = useNameAlert();
 
   useEffect(() => {
     translateToRef.current = prefs.translateTo;
   }, [prefs.translateTo]);
+
+  useEffect(() => {
+    keywordsRef.current = prefs.alertKeywords;
+  }, [prefs.alertKeywords]);
 
   const translateTarget = prefs.translateTo !== null ? SUPPORTED_LANGUAGES[prefs.translateTo] : null;
 
@@ -63,7 +72,9 @@ export default function DeafMode() {
     const id = ++idRef.current;
     setLines((current) => [...current, { id, text }]);
     setInterimText('');
-    Haptics.selectionAsync();
+    const keyword = findKeyword(text, keywordsRef.current);
+    if (keyword) nameAlert.trigger(keyword, text);
+    else Haptics.selectionAsync();
     const target = translateToRef.current;
     if (target === null) return;
     translateCaption(text, SUPPORTED_LANGUAGES[target].openai)
@@ -93,7 +104,7 @@ export default function DeafMode() {
           setInterimText('');
           setStatusText('Captions stopped. Tap the microphone to start again.');
         },
-      });
+      }, prefs.alertKeywords);
     } catch (error) {
       setIsRecording(false);
       setStatusText(describeError(error));
@@ -134,6 +145,12 @@ export default function DeafMode() {
           icon={Ear}
           color={Colors.modeDeaf}
           right={
+            <>
+            <CatchUpButton
+              lines={lines.filter((line) => !line.mine).map((line) => line.text)}
+              languageName={activeLang.openai}
+              keywords={prefs.alertKeywords}
+            />
             <Pressable
               onPress={() => setShowTranslate((value) => !value)}
               style={[styles.translateBtn, translateTarget && styles.translateBtnOn]}
@@ -144,6 +161,7 @@ export default function DeafMode() {
             >
               <Languages color={translateTarget ? Colors.onAccent : Colors.white} size={20} />
             </Pressable>
+            </>
           }
         />
 
@@ -178,6 +196,8 @@ export default function DeafMode() {
           </View>
         ) : null}
 
+        <NameAlertBanner alert={nameAlert.alert} onDismiss={nameAlert.dismiss} />
+
         {micDenied ? (
           <PermissionNotice
             title="Microphone access needed"
@@ -197,7 +217,7 @@ export default function DeafMode() {
             ) : (
               lines.map((line) => (
                 <View key={line.id} style={[styles.bubble, line.mine ? styles.bubbleMine : styles.bubbleOther]}>
-                  <Text style={styles.bubbleText}>{line.text}</Text>
+                  <HighlightedText text={line.text} keywords={line.mine ? [] : prefs.alertKeywords} style={styles.bubbleText} />
                   {line.translation ? <Text style={styles.translation}>{line.translation}</Text> : null}
                 </View>
               ))

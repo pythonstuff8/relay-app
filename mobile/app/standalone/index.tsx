@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BookOpenText, Ear, Eye, Glasses, Hand, MessageSquareText, Volume2 } from 'lucide-react-native';
+import { BookOpenText, Ear, Eye, Glasses, Hand, MessageSquareText, Users, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { MenuStrip } from '../../components/MenuStrip';
@@ -32,6 +32,13 @@ const FEATURES = [
     color: Colors.modeDeaf,
   },
   {
+    path: '/standalone/conversation',
+    title: 'CONVERSATION',
+    description: 'Face to face, with live translation',
+    icon: Users,
+    color: Colors.modeRead,
+  },
+  {
     path: '/standalone/braille',
     title: 'BRAILLE',
     description: 'Braille keyboard and haptic reader',
@@ -59,7 +66,7 @@ export default function StandaloneIndex() {
 
   useEffect(() => {
     sayPrompt(
-      'Standalone mode. From top to bottom: Blind mode, Read aloud, Live captions, Braille, Quick phrases, and Loud sound alert.'
+      'Standalone mode. From top to bottom: Blind mode, Read aloud, Live captions, Conversation, Braille, Quick phrases, and Loud sound alert.'
     );
     return () => stopSpeaking();
   }, []);

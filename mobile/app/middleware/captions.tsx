@@ -5,6 +5,9 @@ import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import { AArrowDown, AArrowUp, Captions, Trash2 } from 'lucide-react-native';
 import { ScreenHeader } from '../../components/ScreenHeader';
+import { HighlightedText, NameAlertBanner, useNameAlert } from '../../components/NameAlert';
+import { CatchUpButton } from '../../components/CatchUp';
+import { findKeyword } from '../../utils/keywords';
 import { Colors, Typography } from '../../constants/theme';
 import { useBridge } from '../../context/BridgeContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -17,7 +20,19 @@ const MAX_SCALE = 2.2;
 export default function CaptionMirrorScreen() {
   useKeepAwake();
   const { captions, interimCaption, status, desktopName, clearCaptions } = useBridge();
-  const { prefs, updatePrefs } = useLanguage();
+  const { prefs, updatePrefs, activeLang } = useLanguage();
+  const nameAlert = useNameAlert();
+  const lastCheckedRef = useRef(0);
+  const latest = captions.at(-1);
+  const triggerAlert = nameAlert.trigger;
+
+  // Alert once per new final caption that mentions the user.
+  useEffect(() => {
+    if (!latest || latest.id <= lastCheckedRef.current) return;
+    lastCheckedRef.current = latest.id;
+    const keyword = findKeyword(latest.text, prefs.alertKeywords);
+    if (keyword) triggerAlert(keyword, latest.text);
+  }, [latest, prefs.alertKeywords, triggerAlert]);
   const scrollRef = useRef<ScrollView>(null);
   const scale = prefs.captionScale;
   const fontSize = Math.round(Typography.sizes.title3 * scale);
@@ -40,6 +55,7 @@ export default function CaptionMirrorScreen() {
         color={Colors.modeDeaf}
         right={
           <>
+            <CatchUpButton lines={captions.map((c) => c.text)} languageName={activeLang.openai} keywords={prefs.alertKeywords} />
             <Pressable style={styles.iconBtn} onPress={() => changeScale(-0.2)} accessibilityRole="button" accessibilityLabel="Smaller text">
               <AArrowDown color={Colors.white} size={22} />
             </Pressable>
@@ -52,6 +68,8 @@ export default function CaptionMirrorScreen() {
           </>
         }
       />
+
+      <NameAlertBanner alert={nameAlert.alert} onDismiss={nameAlert.dismiss} />
 
       {status !== 'connected' ? (
         <Text style={styles.banner}>Computer not connected. Captions will resume when it reconnects.</Text>
@@ -75,7 +93,11 @@ export default function CaptionMirrorScreen() {
                   {`Speaker ${caption.speaker + 1}`}
                 </Text>
               ) : null}
-              <Text style={[styles.caption, { fontSize, lineHeight: Math.round(fontSize * 1.35) }]}>{caption.text}</Text>
+              <HighlightedText
+                text={caption.text}
+                keywords={prefs.alertKeywords}
+                style={[styles.caption, { fontSize, lineHeight: Math.round(fontSize * 1.35) }]}
+              />
             </View>
           ))}
           {interimCaption ? (

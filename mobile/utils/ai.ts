@@ -16,7 +16,12 @@ export async function captureForAI(camera: CameraView | null, maxWidth: number):
   return resized.base64;
 }
 
-export async function describeSurroundings(base64Jpeg: string, question: string, languageName: string): Promise<string> {
+export async function describeSurroundings(
+  base64Jpeg: string,
+  question: string,
+  languageName: string,
+  detail: 'low' | 'high' = 'low'
+): Promise<string> {
   const query = question.trim() || 'What is in front of me?';
   return chatCompletion({
     model: 'gpt-4o-mini',
@@ -29,7 +34,7 @@ export async function describeSurroundings(base64Jpeg: string, question: string,
       `Reply only in ${languageName}.`,
     user: [
       { type: 'text', text: `Question: ${query}` },
-      { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Jpeg}`, detail: 'low' } },
+      { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Jpeg}`, detail } },
     ],
   });
 }
@@ -49,6 +54,23 @@ export async function readTextInImage(base64Jpeg: string, languageName: string):
       { type: 'text', text: 'Read this aloud.' },
       { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Jpeg}`, detail: 'high' } },
     ],
+  });
+}
+
+export async function catchUpSummary(lines: string[], languageName: string, keywords: string[]): Promise<string> {
+  const names = keywords.length ? keywords.join(', ') : 'the user';
+  return chatCompletion({
+    model: 'gpt-5.6-luna',
+    maxTokens: 350,
+    temperature: 0.2,
+    timeoutMs: 20000,
+    system:
+      'You help a Deaf or hard of hearing person catch up on a conversation from its live captions. ' +
+      'Write at most 3 short bullet points starting with "- " covering what was said. ' +
+      `Then, if anyone asked a question of or mentioned ${names}, add a line starting with "For you:" saying what. ` +
+      'Captions can contain recognition errors; do not invent details. ' +
+      `Reply only in ${languageName}.`,
+    user: lines.join('\n'),
   });
 }
 

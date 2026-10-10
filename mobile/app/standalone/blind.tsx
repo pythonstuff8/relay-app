@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
@@ -16,6 +16,15 @@ import { describeError } from '../../utils/relayApi';
 import { sayPrompt, speakContent, stopSpeaking } from '../../utils/speech';
 
 const IDLE_TEXT = 'HOLD TO ASK';
+
+// One-tap questions for common daily tasks. Money and dates need high detail.
+const QUICK_ASKS = [
+  { label: 'Money', question: 'What bill or coin is this? Say the amount and currency.', detail: 'high' },
+  { label: 'Color', question: 'What color is the main object or clothing item in front of me?', detail: 'low' },
+  { label: 'Expiry date', question: 'Find the expiration or best-by date on this package and read it.', detail: 'high' },
+  { label: 'Sign', question: 'Read the sign or label in front of me, including any numbers.', detail: 'high' },
+  { label: 'Path ahead', question: 'Is my walking path ahead clear? Mention obstacles and where they are.', detail: 'low' },
+] as const;
 
 export default function BlindMode() {
   const { activeLang } = useLanguage();
@@ -73,6 +82,33 @@ export default function BlindMode() {
       else session.stop();
     } catch {
       // Voice is optional; the photo is still described when released.
+    }
+  };
+
+  const askPreset = async (question: string, detail: 'low' | 'high', label: string) => {
+    if (isProcessing || holdingRef.current) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    stopSpeaking();
+    setIsProcessing(true);
+    setAnswer('');
+    try {
+      setStatusText(label.toUpperCase());
+      const photo = await captureForAI(cameraRef.current, detail === 'high' ? 1600 : 1024);
+      setStatusText('THINKING...');
+      const response = await describeSurroundings(photo, question, activeLang.openai, detail);
+      setAnswer(response);
+      setStatusText('ANSWER');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      speakContent(response, activeLang.tts);
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const message = describeError(error);
+      setAnswer(message);
+      setStatusText('TRY AGAIN');
+      sayPrompt(message);
+    } finally {
+      setIsProcessing(false);
+      resetStatusSoon();
     }
   };
 
@@ -142,6 +178,21 @@ export default function BlindMode() {
         {micGranted === false ? (
           <Text style={styles.note}>Microphone is off, so Relay will describe what is in front of you.</Text>
         ) : null}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {QUICK_ASKS.map((ask) => (
+            <Pressable
+              key={ask.label}
+              style={({ pressed }) => [styles.chip, pressed && { opacity: 0.8 }, isProcessing && { opacity: 0.4 }]}
+              onPress={() => askPreset(ask.question, ask.detail, ask.label)}
+              disabled={isProcessing}
+              accessibilityRole="button"
+              accessibilityLabel={`Quick ask: ${ask.label}`}
+              accessibilityHint={ask.question}
+            >
+              <Text style={styles.chipText}>{ask.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </SafeAreaView>
 
       <Pressable
@@ -175,6 +226,14 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
   note: { color: Colors.textSubtle, fontSize: Typography.sizes.body, marginTop: 8 },
+  chips: { gap: 10, paddingTop: 12 },
+  chip: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: Colors.modeBlind,
+  },
+  chipText: { color: Colors.white, fontSize: Typography.sizes.body, fontWeight: '800' },
   pttRegion: {
     flex: 1,
     width: '100%',

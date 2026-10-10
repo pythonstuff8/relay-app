@@ -13,9 +13,16 @@ export type LiveCaptionSession = {
 };
 
 // Streams the microphone to Deepgram using a short-lived token from the Relay API.
-export async function startLiveCaptions(language: string, handlers: LiveCaptionHandlers): Promise<LiveCaptionSession> {
+export async function startLiveCaptions(
+  language: string,
+  handlers: LiveCaptionHandlers,
+  keyterms: string[] = []
+): Promise<LiveCaptionSession> {
   const token = await getDeepgramToken();
+  // Keyterm prompting (nova-3, English) helps names like "Maya" get recognized.
+  const boost = language.startsWith('en') ? keyterms.slice(0, 10).map((term) => `keyterm=${encodeURIComponent(term)}`) : [];
   const params = [
+    ...boost,
     'model=nova-3',
     'smart_format=true',
     'interim_results=true',

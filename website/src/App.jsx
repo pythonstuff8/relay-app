@@ -22,7 +22,7 @@ const HERO_VIDEO =
 const MODES_VIDEO = 'https://stream.mux.com/9JXDljEVWYwWu01PUkAemafDugK89o01BR6zqJ3aS9u00A.m3u8';
 const REPO_URL = 'https://github.com/pythonstuff8/relay-app';
 const RELEASES_URL = `${REPO_URL}/releases/latest`;
-const RELEASE_VERSION = '1.1.0';
+const RELEASE_VERSION = '1.1.1';
 
 // Flip `live` to true (and fill in the App Store URL) once each store listing is approved.
 const MOBILE_STORES = [
@@ -46,9 +46,10 @@ const MOBILE_FEATURES = [
   {
     title: 'Standalone on your phone',
     items: [
-      'Blind Mode: hold to ask, hear what the camera sees',
+      'Blind Mode: hold to ask, or one-tap Quick Ask for money, colors, and dates',
       'Read Aloud: point at signs, menus, and documents',
-      'Live captions with optional translation',
+      'Live captions with translation, Name Alert, and Catch Me Up',
+      'Face-to-face Conversation mode, translated both ways',
       'Braille keyboard and haptic Braille reader',
       'Quick Phrases board and Loud Sound Alerts'
     ]
