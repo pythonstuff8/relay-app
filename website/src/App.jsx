@@ -50,6 +50,8 @@ const MOBILE_FEATURES = [
       'Read Aloud: point at signs, menus, and documents',
       'Live captions with translation, Name Alert, and Catch Me Up',
       'Face-to-face Conversation mode, translated both ways',
+      'Find My Object: haptic hot/cold guidance to lost keys or a phone',
+      'Feel the Conversation: speech turned into Braille vibration for DeafBlind users',
       'Braille keyboard and haptic Braille reader',
       'Quick Phrases board and Loud Sound Alerts'
     ]
@@ -60,6 +62,8 @@ const MOBILE_FEATURES = [
       'Scan a QR code to pair over your Wi-Fi',
       'Remote Mic: put your phone near the speaker, captions appear on the computer',
       'Caption Mirror: follow the computer captions on your phone',
+      'Classroom Broadcast: every phone gets the captions in its own language',
+      'Night Guard: smoke alarm at night strobes the phone flashlight and vibrates',
       'Sound alerts from the computer as phone vibrations'
     ]
   }

@@ -44,6 +44,8 @@ ON YOUR PHONE
 - Name Alert: your phone vibrates and highlights the caption when someone says your name.
 - Catch Me Up: one tap summarizes what you missed, including anything asked of you.
 - Conversation: lay the phone between you and another person for a face-to-face chat, translated both ways.
+- Find My Object: say what you lost and taps get stronger as your camera gets closer to it.
+- Feel the Conversation: for DeafBlind users, speech nearby becomes short Braille vibrations.
 - Quick Ask: one-tap help to identify money, colors, expiry dates, and signs.
 - Braille: a six-dot Braille keyboard and a haptic Braille reader you can feel through vibration.
 - Quick Phrases: show or speak ready-made messages like "I am Deaf, please write it down." Add your own.
@@ -52,7 +54,9 @@ ON YOUR PHONE
 WITH YOUR COMPUTER
 Pair with the Relay desktop app (macOS, Windows, Linux) by scanning a QR code.
 - Sound Alerts: feel a vibration when your computer hears an alarm, knock, or other important sound.
-- Caption Mirror: follow your computer's live captions on your phone in text as big as you like.
+- Caption Mirror: follow your computer's live captions on your phone, translated into your language if you want in text as big as you like.
+- Night Guard: if your computer hears a smoke alarm at night, your phone strobes its flashlight and vibrates until you wake.
+- Classroom Broadcast: every paired phone gets the teacher's captions in its own language.
 - Remote Mic: put your phone near the person talking for clearer captions on your computer.
 
 BUILT FOR ACCESSIBILITY

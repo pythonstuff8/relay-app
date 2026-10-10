@@ -24,21 +24,20 @@ Accessibility apps win often, for example NOVA (KS-03, 2024), SafeStride (MD-08,
 - **Quick Ask in Blind Mode:** one-tap presets for money, colors, expiry dates and signs.
 - **Conversation mode:** the phone lies flat between two people. The top half is flipped for the hearing person, there's live translation, and typed replies are spoken aloud.
 
-## Next ideas (ranked by impact × effort)
-1. **Classroom Broadcast:** the desktop translates captions once per language and sends each phone its language. Translate on the desktop to stay under the proxy's 60 requests per minute per IP.
-2. **Find My Object:** a hot/cold haptic search loop using gpt-4o-mini vision with low detail, about every 1.5 s.
-3. **Feel the Conversation (DeafBlind):** compress each caption to about 5 words and play it as haptic Braille.
-4. **Night Guard:** a desktop smoke-alarm detection strobes the phone's flashlight. Keep the strobe at 2 Hz or slower (WCAG 2.3.1).
+- **Find My Object:** pick "keys" and sweep the camera. The frame is sent as left/center/right strips, because the vision model recognizes objects well but places them poorly. Taps get stronger as you get closer, and it speaks "turn left" or "turn right".
+- **Feel the Conversation (DeafBlind):** each caption is compressed to about 5 words and played as haptic Braille, from the phone mic or the computer's captions.
+- **Night Guard:** the desktop's sound detection of a smoke alarm or siren strobes the phone's flashlight and screen at 1 Hz (under the WCAG 2.3.1 limit of 3 flashes/s) and vibrates until you tap. It has a Test alarm button.
+- **Classroom Broadcast:** each phone asks the computer for its language. The computer translates each final caption into every requested language in ONE request (cost and rate limit stay flat however many students join) and sends each phone its own version.
 
 ## Video beats (2:55)
 
 | Time | Content |
 |---|---|
-| 0:00–0:12 | Cold open: Name Alert, or a phone buzzing when a smoke alarm sounds. |
+| 0:00–0:12 | Cold open: Night Guard. Lights off, a smoke alarm sounds, the phone strobes and buzzes. Or Name Alert. |
 | 0:12–0:30 | The problem, with statistics (below), and why you built it. |
 | 0:30–1:10 | Deaf student: captions, Name Alert, Catch me up, translation. |
 | 1:10–1:45 | Blind user: Blind Mode Quick Ask (a $5 bill), Read Aloud. |
-| 1:45–2:05 | Conversation mode across two languages; Braille. |
+| 1:45–2:05 | Conversation mode across two languages; Find My Object; Feel the Conversation (Braille vibration). Classroom Broadcast: two phones, two languages. |
 | 2:05–2:35 | Architecture: Electron + Expo, the LAN bridge, on-device YAMNet, the Vercel proxy with short-lived tokens. Name one hard problem you solved. |
 | 2:35–2:55 | Tester quotes, metrics, links. |
 
