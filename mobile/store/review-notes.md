@@ -13,6 +13,9 @@ How to test without any other device:
    - Blind Mode: point the camera at the room, press and hold the bottom of the screen, ask "What is in front of me?", release. Relay speaks a short description.
    - Read Aloud: point at any printed text and tap READ.
    - Live Captions: tap START CAPTIONS and speak. Captions appear in real time. The translate button at top right (two-letter "A 文" icon) turns on translation.
+   - Quick Ask (Blind Mode): tap Money, Color, Expiry date, or Sign for a one-tap answer.
+   - Conversation: type a reply and it is shown upside-down for the other person and spoken in their language.
+   - Settings > Name Alert: enter a name. When it is said in Live Captions, the phone vibrates and highlights it. Catch Me Up (clock icon) summarizes recent captions.
    - Braille, Quick Phrases, and Loud Sound Alert work fully offline.
 
 Connect to Computer features (Sound Alerts, Caption Mirror, Remote Mic) need the free Relay desktop app on the same Wi-Fi network:
