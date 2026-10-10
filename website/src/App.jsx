@@ -30,7 +30,7 @@ const MOBILE_STORES = [
     store: 'App Store',
     caption: 'Download on the',
     icon: FaApple,
-    url: '',
+    url: 'https://apps.apple.com/app/id6821441069',
     live: false
   },
   {
