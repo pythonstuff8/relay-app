@@ -14,6 +14,37 @@ const PROXY_HEADERS = {
 
 let openAIClient = null;
 
+// OpenAI retires models on a schedule (developers.openai.com/api/docs/deprecations).
+// Stored settings or older code may still name a retired model, so map them here.
+const CHAT_TEXT_MODEL = 'gpt-5.6-luna';
+const SPEECH_MODEL = 'gpt-4o-mini-tts';
+const TRANSCRIBE_MODEL = 'gpt-transcribe';
+const LEGACY_MODELS = {
+    'gpt-4.1-nano': CHAT_TEXT_MODEL, // shut down 2026-10-23
+    'gpt-4.1-nano-2025-04-14': CHAT_TEXT_MODEL,
+    'tts-1': SPEECH_MODEL, // shut down 2027-01-06
+    'gpt-4o-mini-transcribe': TRANSCRIBE_MODEL // shut down 2027-02-26
+};
+
+function resolveModel(model) {
+    const name = String(model || '').trim();
+    return LEGACY_MODELS[name] || name;
+}
+
+// GPT-5 family models reject max_tokens and spend output budget on reasoning
+// unless told not to, so normalize every chat request in one place.
+function normalizeChatRequest(body = {}) {
+    const request = { ...body, model: resolveModel(body.model) };
+    if (/^gpt-5/.test(request.model)) {
+        if (request.max_tokens != null && request.max_completion_tokens == null) {
+            request.max_completion_tokens = request.max_tokens;
+        }
+        delete request.max_tokens;
+        if (request.reasoning_effort == null) request.reasoning_effort = 'none';
+    }
+    return request;
+}
+
 function useDirectKey(envName) {
     return !app.isPackaged
         && process.env.RELAY_FORCE_PROXY !== '1'
@@ -40,6 +71,9 @@ function getOpenAIClient() {
                 timeout: 60_000,
                 maxRetries: 1
             });
+        const completions = openAIClient.chat.completions;
+        const create = completions.create.bind(completions);
+        completions.create = (body, options) => create(normalizeChatRequest(body), options);
     }
     return openAIClient;
 }
@@ -72,6 +106,11 @@ async function getDeepgramClient() {
 
 module.exports = {
     RELAY_API_BASE,
+    CHAT_TEXT_MODEL,
+    SPEECH_MODEL,
+    TRANSCRIBE_MODEL,
+    resolveModel,
+    normalizeChatRequest,
     getAIMode,
     getOpenAIClient,
     getDeepgramClient,

@@ -54,7 +54,7 @@ export async function readTextInImage(base64Jpeg: string, languageName: string):
 
 export async function translateCaption(text: string, targetLanguage: string): Promise<string> {
   return chatCompletion({
-    model: 'gpt-4.1-nano',
+    model: 'gpt-5.6-luna',
     maxTokens: 300,
     temperature: 0,
     timeoutMs: 15000,

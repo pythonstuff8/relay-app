@@ -1177,7 +1177,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             } else {
                 statusTextEl.innerText = 'No active meeting';
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                 }, 1400);
                 speakBlindConfirmation('No active meeting', 'meeting-summary-empty', 1000);
             }
@@ -1189,7 +1189,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             meetingMode.updateBadge();
             statusTextEl.innerText = isActive ? 'Meeting mode active' : 'Meeting mode ended';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
             }, 1400);
             maybeSpeakActionCompletion('meeting-toggle', { source, extra: isActive ? 'Meeting mode active' : 'Meeting mode ended' });
             break;
@@ -1209,7 +1209,7 @@ function handleAction(action, { source = 'unknown' } = {}) {
             try { commandBar.hide?.(); } catch (e) {}
             statusTextEl.innerText = 'Stopped';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
             }, 1200);
             maybeSpeakActionCompletion('stop-all', { source });
             break;
@@ -1234,7 +1234,7 @@ window.addEventListener('command-executed', (event) => {
     if (detail.success) {
         statusTextEl.innerText = `Command: ${command}`;
         setTimeout(() => {
-            statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+            statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
         }, 1400);
     }
 });
@@ -1327,7 +1327,7 @@ function setupDeepgramListeners() {
                     }
                 }
 
-                statusTextEl.innerText = "Listening (Deepgram Nova-2)";
+                statusTextEl.innerText = "Listening (Deepgram Nova-3)";
             } else {
                 captionRenderer.setInterim(result);
                 statusTextEl.innerText = "Transcribing...";
@@ -1340,7 +1340,7 @@ function setupDeepgramListeners() {
     window.electronAPI.onDeepgramStatus((status) => {
         if (status.connected) {
             isDeepgramStreaming = true;
-            statusTextEl.innerText = "Connected (Deepgram Nova-2)";
+            statusTextEl.innerText = "Connected (Deepgram Nova-3)";
             dotEl.classList.add('active');
         } else {
             isDeepgramStreaming = false;
@@ -2386,7 +2386,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
 
         if (result?.success && result?.answer) {
             surfaceContextualAssistantAnswer(result.answer, source);
-            statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+            statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
             return true;
         }
 
@@ -2401,7 +2401,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
             wakePhrase: routingMeta?.wakePhrase || '',
             routingStage: 'context_assist'
         });
-        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
         return false;
     } catch (error) {
         const failureReason = String(error?.message || 'context_assist_error');
@@ -2415,7 +2415,7 @@ async function runContextualWakeFallback(rawPrompt, source = 'unknown', routingM
             wakePhrase: routingMeta?.wakePhrase || '',
             routingStage: 'context_assist'
         });
-        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
         return false;
     } finally {
         contextualWakeAssistState.inFlight = false;
@@ -2613,7 +2613,7 @@ function announceAutomationMessage(message) {
         blindMode.speak(text);
     }
     setTimeout(() => {
-        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
     }, 1800);
 }
 
@@ -2912,7 +2912,7 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                 if (success) {
                     statusTextEl.innerText = 'Pressed key';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                     }, 1200);
                 }
             })
@@ -2977,23 +2977,23 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                     });
                     statusTextEl.innerText = 'Typed text';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                     }, 1200);
                 } else if (response?.permissionRequired) {
                     statusTextEl.innerText = 'Desktop typing unavailable';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                     }, 1600);
                 } else if (response?.reason === 'type_timeout') {
                     blindMode.speak('Typing timed out. I could not control the target app.');
                     statusTextEl.innerText = 'Typing timed out';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                     }, 1600);
                 } else if (response?.reason === 'no_focused_target') {
                     statusTextEl.innerText = 'Focus a text field, then try again';
                     setTimeout(() => {
-                        statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                        statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                     }, 1600);
                 }
             })
@@ -3055,12 +3055,12 @@ function maybeHandleDesktopTargetFallback({ normalized, source, rawText = '' }) 
                 });
                 statusTextEl.innerText = `Focused ${appLabel}`;
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                 }, 1400);
             } else if (response?.permissionRequired) {
                 statusTextEl.innerText = 'Desktop control unavailable';
                 setTimeout(() => {
-                    statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                    statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
                 }, 1600);
             }
         })
@@ -3132,7 +3132,7 @@ function handleCommandPhrase(rawText, {
         if (source === 'deepgram' || source === 'speech-recognition') {
             statusTextEl.innerText = 'Say "navigate to", "click on", "press ...", or "type ..."';
             setTimeout(() => {
-                statusTextEl.innerText = 'Listening (Deepgram Nova-2)';
+                statusTextEl.innerText = 'Listening (Deepgram Nova-3)';
             }, 1600);
         }
         return false;
@@ -3593,9 +3593,10 @@ window.__relayCommandRouterReady = true;
             window.electronAPI?.setSettings?.('automationVisionFallback', true);
         }
         const normalizedAutomationModel = String(appSettings.automationModel || '').trim().toLowerCase();
-        if (!normalizedAutomationModel || normalizedAutomationModel === 'gpt-4o-mini') {
-            appSettings.automationModel = 'gpt-4.1-nano';
-            window.electronAPI?.setSettings?.('automationModel', 'gpt-4.1-nano');
+        // gpt-4.1-nano was retired by OpenAI on 2026-10-23.
+        if (!normalizedAutomationModel || ['gpt-4o-mini', 'gpt-4.1-nano'].includes(normalizedAutomationModel)) {
+            appSettings.automationModel = 'gpt-5.6-luna';
+            window.electronAPI?.setSettings?.('automationModel', 'gpt-5.6-luna');
         }
         if (appSettings.accessibilityMode === 'combined') {
             appSettings.accessibilityMode = 'deaf';
@@ -3729,7 +3730,7 @@ window.__relayCommandRouterReady = true;
     }));
 
     // Auto-start
-    window.electronAPI.log("Starting Relay with Deepgram Nova-2 streaming...");
+    window.electronAPI.log("Starting Relay with Deepgram Nova-3 streaming...");
     startRecording('mic');
     refreshSources();
 })();

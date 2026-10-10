@@ -10,10 +10,20 @@ const DEFAULT_OUTPUT_TOKENS = 600;
 const MAX_TTS_CHARS = 4096;
 
 const MODELS_BY_ROUTE = {
-  'chat/completions': new Set(['gpt-4o-mini', 'gpt-4.1-nano']),
-  'audio/speech': new Set(['tts-1', 'gpt-4o-mini-tts']),
-  'audio/transcriptions': new Set(['gpt-4o-mini-transcribe'])
+  'chat/completions': new Set(['gpt-4o-mini', 'gpt-5.6-luna']),
+  'audio/speech': new Set(['gpt-4o-mini-tts']),
+  'audio/transcriptions': new Set(['gpt-transcribe'])
 };
+
+// Installed apps keep sending the model names they shipped with. Map models
+// OpenAI has retired (or scheduled to retire) to their supported replacements.
+const LEGACY_MODELS = {
+  'gpt-4.1-nano': 'gpt-5.6-luna', // shut down 2026-10-23
+  'tts-1': 'gpt-4o-mini-tts', // shut down 2027-01-06
+  'gpt-4o-mini-transcribe': 'gpt-transcribe' // shut down 2027-02-26
+};
+
+const resolveModel = (model) => LEGACY_MODELS[model] || model;
 
 function upstreamHeaders(contentType) {
   const headers = { authorization: `Bearer ${process.env.OPENAI_API_KEY}` };
@@ -39,6 +49,12 @@ function clampTokens(body) {
   }
   if (body.max_tokens == null && body.max_completion_tokens == null) {
     body.max_tokens = DEFAULT_OUTPUT_TOKENS;
+  }
+  // GPT-5 family: max_tokens is rejected, and reasoning would eat the output budget.
+  if (/^gpt-5/.test(body.model)) {
+    if (body.max_completion_tokens == null) body.max_completion_tokens = body.max_tokens;
+    delete body.max_tokens;
+    if (body.reasoning_effort == null) body.reasoning_effort = 'none';
   }
 }
 
@@ -71,9 +87,11 @@ export async function POST(request) {
     } catch {
       return json(400, { error: { message: 'Expected multipart form data' } });
     }
-    if (!allowedModels.has(String(form.get('model') || ''))) {
+    const model = resolveModel(String(form.get('model') || ''));
+    if (!allowedModels.has(model)) {
       return json(400, { error: { message: 'Model not allowed' } });
     }
+    form.set('model', model);
     const upstream = await fetch(`${OPENAI_BASE}/${route}`, {
       method: 'POST',
       headers: upstreamHeaders(),
@@ -88,6 +106,7 @@ export async function POST(request) {
   } catch {
     return json(400, { error: { message: 'Expected JSON body' } });
   }
+  if (body) body.model = resolveModel(body.model);
   if (!body || !allowedModels.has(body.model)) {
     return json(400, { error: { message: 'Model not allowed' } });
   }

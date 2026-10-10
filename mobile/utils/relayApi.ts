@@ -54,7 +54,7 @@ async function relayFetch(path: string, init: RequestInit = {}, timeoutMs = 2500
 type ChatContent = string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' } })[];
 
 export async function chatCompletion(options: {
-  model: 'gpt-4o-mini' | 'gpt-4.1-nano';
+  model: 'gpt-4o-mini' | 'gpt-5.6-luna';
   system: string;
   user: ChatContent;
   maxTokens: number;
@@ -69,7 +69,10 @@ export async function chatCompletion(options: {
       body: JSON.stringify({
         model: options.model,
         temperature: options.temperature ?? 0.2,
-        max_tokens: options.maxTokens,
+        // GPT-5 family models take max_completion_tokens and should skip reasoning for speed.
+        ...(options.model.startsWith('gpt-5')
+          ? { max_completion_tokens: options.maxTokens, reasoning_effort: 'none' }
+          : { max_tokens: options.maxTokens }),
         messages: [
           { role: 'system', content: options.system },
           { role: 'user', content: options.user },

@@ -16,7 +16,7 @@ export type LiveCaptionSession = {
 export async function startLiveCaptions(language: string, handlers: LiveCaptionHandlers): Promise<LiveCaptionSession> {
   const token = await getDeepgramToken();
   const params = [
-    'model=nova-2',
+    'model=nova-3',
     'smart_format=true',
     'interim_results=true',
     'encoding=linear16',

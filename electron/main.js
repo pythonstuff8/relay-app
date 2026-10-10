@@ -29,7 +29,7 @@ const {
 
 // ML sound classifier – loads model in background on startup
 let soundClassifier = null;
-const FAST_TEXT_MODEL = String(process.env.RELAY_FAST_TEXT_MODEL || 'gpt-4.1-nano').trim() || 'gpt-4.1-nano';
+const FAST_TEXT_MODEL = String(process.env.RELAY_FAST_TEXT_MODEL || 'gpt-5.6-luna').trim() || 'gpt-5.6-luna';
 const FAST_VISION_MODEL = String(process.env.RELAY_FAST_VISION_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini';
 const CONTEXT_CAPTURE_DIR_NAME = 'Relay Context Captures';
 const recentRecipients = [];
@@ -105,7 +105,7 @@ function markSetupComplete() {
 
 const activeWindow = require('active-win');
 const { LiveTranscriptionEvents } = require('@deepgram/sdk');
-const { getOpenAIClient, getDeepgramClient, getAIMode, toUploadFile } = require('./ai-clients');
+const { getOpenAIClient, getDeepgramClient, getAIMode, toUploadFile, resolveModel, CHAT_TEXT_MODEL, SPEECH_MODEL, TRANSCRIBE_MODEL } = require('./ai-clients');
 
 // Initialize settings
 settings.init();
@@ -1822,10 +1822,10 @@ async function createDesktopAutomationPlan(payload = {}) {
     const platform = process.platform;
     const scriptLanguage = getExpectedScriptLanguage(platform);
     const expectedLanguage = scriptLanguage;
-    const configuredModel = String(settingsState.automationModel || 'gpt-4.1-nano').trim() || 'gpt-4.1-nano';
+    const configuredModel = resolveModel(settingsState.automationModel) || CHAT_TEXT_MODEL;
     const modelCandidates = [...new Set([
         configuredModel,
-        'gpt-4.1-nano',
+        CHAT_TEXT_MODEL,
         'gpt-4o-mini'
     ])];
     const ttlMs = Number(settingsState.automationContextTtlMs || 45000);
@@ -2896,7 +2896,7 @@ ipcMain.handle('desktop-automation-status', async () => {
             ...capabilities,
             premiumEnabled: settingsState.premiumAutomationEnabled !== false,
             ttlMs: Number(settingsState.automationContextTtlMs || 45000),
-            model: String(settingsState.automationModel || 'gpt-4.1-nano'),
+            model: resolveModel(settingsState.automationModel) || CHAT_TEXT_MODEL,
             context: normalizeAutomationContext(lastAutomationContext, Number(settingsState.automationContextTtlMs || 45000)),
             recents: recentRecipients.slice(0, 8)
         };
@@ -2957,7 +2957,7 @@ ipcMain.handle('test-deepgram', async () => {
     try {
         const deepgram = await getDeepgramClient();
         const connection = deepgram.listen.live({
-            model: 'nova-2',
+            model: 'nova-3',
             language: 'en-US',
             encoding: 'linear16',
             sample_rate: 16000,
@@ -2987,7 +2987,7 @@ ipcMain.handle('test-deepgram', async () => {
 
 ipcMain.handle('test-tts', async () => {
     try {
-        await getOpenAIClient().models.retrieve('tts-1');
+        await getOpenAIClient().models.retrieve(SPEECH_MODEL);
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -3176,10 +3176,10 @@ async function openDeepgramStream(sampleRate) {
         };
 
         try {
-            console.log(`[Deepgram] Starting Nova-2 streaming connection (${sampleRate} Hz, ${getAIMode().deepgram})...`);
+            console.log(`[Deepgram] Starting Nova-3 streaming connection (${sampleRate} Hz, ${getAIMode().deepgram})...`);
 
             const connection = deepgram.listen.live({
-                model: 'nova-2',
+                model: 'nova-3',
                 language: settings.get('language') || 'en-US',
                 smart_format: true,
                 punctuate: true,
@@ -3433,7 +3433,7 @@ ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
         const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
             wavBuffer,
             {
-                model: 'nova-2',
+                model: 'nova-3',
                 smart_format: true,
                 language: 'en',
                 punctuate: true,
@@ -3451,7 +3451,7 @@ ipcMain.handle('transcribe-audio', async (event, audioBuffer) => {
             const openai = getOpenAIClient();
             const transcription = await openai.audio.transcriptions.create({
                 file: await toUploadFile(wavBuffer, 'audio.wav'),
-                model: 'gpt-4o-mini-transcribe',
+                model: TRANSCRIBE_MODEL,
                 language: 'en'
             });
 
@@ -3471,7 +3471,7 @@ ipcMain.handle('tts-speak', async (event, text) => {
         const tempPath = path.join(os.tmpdir(), `relay_tts_${Date.now()}.mp3`);
 
         const mp3 = await openai.audio.speech.create({
-            model: "tts-1",
+            model: SPEECH_MODEL,
             voice: "alloy",
             input: text,
         });
