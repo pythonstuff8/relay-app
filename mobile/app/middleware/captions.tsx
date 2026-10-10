@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
-import { AArrowDown, AArrowUp, Captions, Trash2 } from 'lucide-react-native';
+import { AArrowDown, AArrowUp, Captions, Languages, Trash2 } from 'lucide-react-native';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { HighlightedText, NameAlertBanner, useNameAlert } from '../../components/NameAlert';
 import { CatchUpButton } from '../../components/CatchUp';
@@ -19,7 +19,7 @@ const MAX_SCALE = 2.2;
 
 export default function CaptionMirrorScreen() {
   useKeepAwake();
-  const { captions, interimCaption, status, desktopName, clearCaptions } = useBridge();
+  const { captions, interimCaption, status, desktopName, clearCaptions, captionLanguage } = useBridge();
   const { prefs, updatePrefs, activeLang } = useLanguage();
   const nameAlert = useNameAlert();
   const lastCheckedRef = useRef(0);
@@ -41,6 +41,15 @@ export default function CaptionMirrorScreen() {
     sayPrompt('Caption mirror. Captions from your computer appear here. Use the buttons at the top to change text size.');
     return () => stopSpeaking();
   }, []);
+
+  // Classroom Broadcast: the computer translates captions into this phone's language.
+  const canTranslate = activeLang.name !== 'English';
+  const toggleTranslate = () => {
+    Haptics.selectionAsync();
+    const next = !prefs.mirrorTranslate;
+    updatePrefs({ mirrorTranslate: next });
+    sayPrompt(next ? `Captions will be translated into ${activeLang.name}.` : 'Captions in the spoken language.');
+  };
 
   const changeScale = (delta: number) => {
     Haptics.selectionAsync();
@@ -71,6 +80,21 @@ export default function CaptionMirrorScreen() {
 
       <NameAlertBanner alert={nameAlert.alert} onDismiss={nameAlert.dismiss} />
 
+      {canTranslate ? (
+        <Pressable
+          style={[styles.translateRow, captionLanguage && styles.translateRowOn]}
+          onPress={toggleTranslate}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: Boolean(captionLanguage) }}
+          accessibilityLabel={`Translate captions into ${activeLang.name}`}
+        >
+          <Languages color={captionLanguage ? Colors.onAccent : Colors.white} size={20} />
+          <Text style={[styles.translateText, captionLanguage && { color: Colors.onAccent }]}>
+            {captionLanguage ? `Captions in ${activeLang.name} (translated by ${desktopName || 'your computer'})` : `Translate captions into ${activeLang.name}`}
+          </Text>
+        </Pressable>
+      ) : null}
+
       {status !== 'connected' ? (
         <Text style={styles.banner}>Computer not connected. Captions will resume when it reconnects.</Text>
       ) : null}
@@ -98,6 +122,7 @@ export default function CaptionMirrorScreen() {
                 keywords={prefs.alertKeywords}
                 style={[styles.caption, { fontSize, lineHeight: Math.round(fontSize * 1.35) }]}
               />
+              {caption.original ? <Text style={styles.original}>{caption.original}</Text> : null}
             </View>
           ))}
           {interimCaption ? (
@@ -118,6 +143,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
   },
+  translateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+    backgroundColor: Colors.glassSecondary,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  translateRowOn: { backgroundColor: Colors.modeRead, borderColor: Colors.modeRead },
+  translateText: { color: Colors.white, fontSize: Typography.sizes.body, fontWeight: '700', flexShrink: 1 },
+  original: { color: Colors.textSubtle, fontSize: Typography.sizes.caption, marginTop: 4 },
   banner: { color: Colors.warning, fontSize: Typography.sizes.body, marginBottom: 10 },
   box: {
     flex: 1,

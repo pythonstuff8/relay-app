@@ -3,15 +3,16 @@ import { AppState, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { Pairing } from '../utils/pairing';
 import { readJson, removeKey, StorageKeys, writeJson } from '../utils/storage';
+import { useLanguage } from './LanguageContext';
 
 // One connection to the Relay desktop app, shared by every screen.
 // Protocol (v1): desktop sends WELCOME, ALERT, CAPTION, AUDIO_ACK, AUDIO_REJECTED, PONG;
-// the phone sends PING, AUDIO_START, AUDIO_STOP and binary PCM16 frames.
+// the phone sends PING, SET_LANGUAGE, AUDIO_START, AUDIO_STOP and binary PCM16 frames.
 
 export type BridgeStatus = 'unpaired' | 'connecting' | 'connected' | 'disconnected';
 
 export type BridgeAlert = { id: number; message: string; severity: 'high' | 'normal'; at: number };
-export type BridgeCaption = { id: number; text: string; speaker: number | null; at: number };
+export type BridgeCaption = { id: number; text: string; speaker: number | null; at: number; original?: string };
 export type BridgeMessage = { type: string; [key: string]: unknown };
 
 type BridgeContextType = {
@@ -29,6 +30,8 @@ type BridgeContextType = {
   sendBinary: (data: ArrayBuffer) => boolean;
   addListener: (listener: (message: BridgeMessage) => void) => () => void;
   clearCaptions: () => void;
+  // Language the computer translates captions into for this phone, or null.
+  captionLanguage: string | null;
 };
 
 const BridgeContext = createContext<BridgeContextType | null>(null);
@@ -52,6 +55,9 @@ async function vibrateForAlert(severity: 'high' | 'normal') {
 }
 
 export function BridgeProvider({ children }: { children: React.ReactNode }) {
+  const { prefs, activeLang } = useLanguage();
+  const captionLanguage = prefs.mirrorTranslate && activeLang.name !== 'English' ? activeLang.openai : null;
+  const captionLanguageRef = useRef(captionLanguage);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [status, setStatus] = useState<BridgeStatus>('unpaired');
   const [desktopName, setDesktopName] = useState<string | null>(null);
@@ -102,7 +108,8 @@ export function BridgeProvider({ children }: { children: React.ReactNode }) {
         const text = String(message.text || '');
         if (message.isFinal) {
           const speaker = typeof message.speaker === 'number' ? message.speaker : null;
-          setCaptions((current) => [...current, { id: ++idRef.current, text, speaker, at: Date.now() }].slice(-MAX_CAPTIONS));
+          const original = typeof message.original === 'string' && message.original !== text ? message.original : undefined;
+          setCaptions((current) => [...current, { id: ++idRef.current, text, speaker, at: Date.now(), original }].slice(-MAX_CAPTIONS));
           setInterimCaption('');
         } else {
           setInterimCaption(text);
@@ -136,6 +143,7 @@ export function BridgeProvider({ children }: { children: React.ReactNode }) {
       attemptRef.current = 0;
       setError(null);
       setStatus('connected');
+      ws.send(JSON.stringify({ type: 'SET_LANGUAGE', language: captionLanguageRef.current }));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
@@ -169,6 +177,13 @@ export function BridgeProvider({ children }: { children: React.ReactNode }) {
       reconnectTimerRef.current = setTimeout(connect, delay);
     };
   }, [handleMessage]);
+
+  // Tell the computer when the requested caption language changes.
+  useEffect(() => {
+    captionLanguageRef.current = captionLanguage;
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'SET_LANGUAGE', language: captionLanguage }));
+  }, [captionLanguage]);
 
   // Restore the saved pairing on launch.
   useEffect(() => {
@@ -264,7 +279,8 @@ export function BridgeProvider({ children }: { children: React.ReactNode }) {
     sendBinary,
     addListener,
     clearCaptions,
-  }), [status, pairing, desktopName, error, alerts, captions, interimCaption, pair, forget, reconnect, sendJson, sendBinary, addListener, clearCaptions]);
+    captionLanguage,
+  }), [status, pairing, desktopName, error, alerts, captions, interimCaption, pair, forget, reconnect, sendJson, sendBinary, addListener, clearCaptions, captionLanguage]);
 
   return <BridgeContext.Provider value={value}>{children}</BridgeContext.Provider>;
 }

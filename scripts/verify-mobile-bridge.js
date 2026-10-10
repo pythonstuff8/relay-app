@@ -24,6 +24,7 @@ function checkStatic() {
     assert(mainJs.includes('new MobileBridge('), 'main.js must start the MobileBridge');
     assert(mainJs.includes("ipcMain.handle('mobile-pairing-info'"), 'main.js pairing info handler');
     assert(mainJs.includes("ipcMain.handle('set-caption-source'"), 'main.js caption source handler');
+    assert(mainJs.includes('translateCaptionForMobiles('), 'main.js translates captions for Classroom Broadcast');
 
     const aiClients = read('electron/ai-clients.js');
     assert(aiClients.includes("'x-relay-client': 'relay-desktop'"), 'proxy client header');
@@ -137,6 +138,20 @@ async function checkRuntime() {
         bridge.broadcast({ type: 'CAPTION', text: 'hello', isFinal: true, speaker: 0 });
         assert.strictEqual((await nextMessage(second, 'CAPTION')).text, 'hello', 'captions broadcast to phones');
 
+        // Classroom Broadcast: phones ask for a caption language; filtered sends reach only them.
+        second.send(JSON.stringify({ type: 'SET_LANGUAGE', language: 'Spanish' }));
+        phone.send(JSON.stringify({ type: 'SET_LANGUAGE', language: 'English' }));
+        await waitFor(() => bridge.captionLanguages.length === 1, 'caption language');
+        assert.deepStrictEqual(bridge.captionLanguages, ['Spanish'], 'English means no translation');
+        phone.inbox.length = 0;
+        second.inbox.length = 0;
+        bridge.broadcast({ type: 'CAPTION', text: 'hola', isFinal: true }, (ws) => ws.captionLanguage === 'Spanish');
+        assert.strictEqual((await nextMessage(second, 'CAPTION')).text, 'hola', 'translated caption reaches the Spanish phone');
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert(!phone.inbox.some((message) => message.type === 'CAPTION'), 'translated caption skips other phones');
+        second.send(JSON.stringify({ type: 'SET_LANGUAGE', language: '<script>' }));
+        await waitFor(() => bridge.captionLanguages.length === 0, 'invalid language cleared');
+
         phone.send(JSON.stringify({ type: 'AUDIO_STOP' }));
         await waitFor(() => events.stops === 1, 'audio stop hook');
 
@@ -156,7 +171,7 @@ async function checkRuntime() {
     try {
         checkStatic();
         await checkRuntime();
-        console.log('Verified mobile bridge: token auth, port fallback, Remote Mic routing, caption broadcast, no bundled secrets.');
+        console.log('Verified mobile bridge: token auth, port fallback, Remote Mic routing, caption broadcast, per-phone caption languages, no bundled secrets.');
         process.exit(0);
     } catch (error) {
         console.error(`[verify-mobile-bridge] ${error.message}`);

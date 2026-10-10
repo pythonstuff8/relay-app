@@ -84,3 +84,80 @@ export async function translateCaption(text: string, targetLanguage: string): Pr
     user: text,
   });
 }
+
+// Feel the Conversation: shrink a caption so it can be felt as Braille in a few seconds.
+export async function compressForTouch(text: string): Promise<string> {
+  return chatCompletion({
+    model: 'gpt-5.6-luna',
+    maxTokens: 40,
+    temperature: 0,
+    timeoutMs: 8000,
+    system:
+      'Compress what was said into at most 5 English words that keep the meaning, like a telegram. ' +
+      'Keep names, numbers (as words), questions, and warnings. Lowercase letters and spaces only, no punctuation. ' +
+      'Translate to English if needed. Output only the words.',
+    user: text,
+  });
+}
+
+export type ObjectSighting = {
+  found: boolean;
+  direction: 'left' | 'center' | 'right' | null;
+  distance: 'near' | 'medium' | 'far' | null;
+  hint: string;
+};
+
+// Vision models place objects poorly but recognize them well, so the frame is
+// sent as left, center, and right strips and the model picks the strip.
+export async function captureStripsForAI(camera: CameraView | null, width = 768): Promise<string[]> {
+  if (!camera) throw new Error('Camera is not ready');
+  const photo = await camera.takePictureAsync({ quality: 0.6, skipProcessing: false });
+  if (!photo?.uri) throw new Error('No camera frame captured');
+  const frame = await manipulateAsync(photo.uri, [{ resize: { width } }], { compress: 0.8, format: SaveFormat.JPEG });
+  const stripWidth = Math.floor(frame.width / 3);
+  const strips = await Promise.all(
+    [0, 1, 2].map((index) =>
+      manipulateAsync(
+        frame.uri,
+        [{ crop: { originX: index * stripWidth, originY: 0, width: stripWidth, height: frame.height } }],
+        { compress: 0.6, format: SaveFormat.JPEG, base64: true }
+      )
+    )
+  );
+  if (strips.some((strip) => !strip.base64)) throw new Error('Could not encode the photo');
+  return strips.map((strip) => strip.base64 as string);
+}
+
+const STRIP_NAMES = ['LEFT', 'CENTER', 'RIGHT'] as const;
+
+// Find My Object: one low-detail request per check keeps each check fast.
+export async function locateObject(strips: string[], target: string, languageName: string): Promise<ObjectSighting> {
+  const raw = await chatCompletion({
+    model: 'gpt-4o-mini',
+    maxTokens: 80,
+    temperature: 0,
+    timeoutMs: 12000,
+    system:
+      'You help a blind person find an object with their phone camera. The camera frame is split into three images: LEFT, CENTER and RIGHT strips, in that order. ' +
+      'Reply with JSON only: {"found": boolean, "strip": "left"|"center"|"right"|null, "distance": "near"|"medium"|"far"|null, "hint": string}. ' +
+      'strip is the strip where most of the object is. distance is near if the object looks large and close. ' +
+      `hint is at most 6 words of guidance in ${languageName}, for example "on the table". Only say found if you are confident.`,
+    user: [
+      { type: 'text', text: `Find: ${target}` },
+      ...strips.flatMap((strip, index) => [
+        { type: 'text' as const, text: STRIP_NAMES[index] },
+        { type: 'image_url' as const, image_url: { url: `data:image/jpeg;base64,${strip}`, detail: 'low' as const } },
+      ]),
+    ],
+  });
+  const match = raw.match(/\{[\s\S]*\}/);
+  try {
+    const data = JSON.parse(match ? match[0] : raw);
+    const direction = ['left', 'center', 'right'].includes(data.strip) ? data.strip : null;
+    const distance = ['near', 'medium', 'far'].includes(data.distance) ? data.distance : null;
+    const found = Boolean(data.found);
+    return { found, direction: found ? direction : null, distance: found ? distance : null, hint: found ? String(data.hint || '').slice(0, 80) : '' };
+  } catch {
+    return { found: false, direction: null, distance: null, hint: '' };
+  }
+}

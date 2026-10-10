@@ -12,6 +12,8 @@ export type Prefs = {
   captionScale: number;
   loudSensitivity: 'low' | 'medium' | 'high';
   alertKeywords: string[];
+  // Classroom Broadcast: ask the computer for captions in the app language.
+  mirrorTranslate: boolean;
 };
 
 const DEFAULT_PREFS: Prefs = {
@@ -21,6 +23,7 @@ const DEFAULT_PREFS: Prefs = {
   captionScale: 1,
   loudSensitivity: 'medium',
   alertKeywords: [],
+  mirrorTranslate: false,
 };
 
 type PrefsContextType = {
@@ -50,7 +53,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     readJson(StorageKeys.prefs, DEFAULT_PREFS).then((stored) => {
       const langIndex = stored.langIndex >= 0 && stored.langIndex < SUPPORTED_LANGUAGES.length ? stored.langIndex : 0;
-      setPrefs({ ...stored, langIndex });
+      setPrefs({ ...DEFAULT_PREFS, ...stored, langIndex });
       setReady(true);
     });
   }, []);

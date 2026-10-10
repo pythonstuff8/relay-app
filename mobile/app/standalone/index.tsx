@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BookOpenText, Ear, Eye, Glasses, Hand, MessageSquareText, Users, Volume2 } from 'lucide-react-native';
+import { BookOpenText, Ear, Eye, FingerprintPattern, Glasses, Hand, MessageSquareText, Search, Users, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { MenuStrip } from '../../components/MenuStrip';
@@ -23,6 +23,13 @@ const FEATURES = [
     description: 'Read signs, menus, and documents',
     icon: BookOpenText,
     color: Colors.modeRead,
+  },
+  {
+    path: '/standalone/find',
+    title: 'FIND MY OBJECT',
+    description: 'Taps guide you to lost keys or a phone',
+    icon: Search,
+    color: Colors.modeBlind,
   },
   {
     path: '/standalone/deaf',
@@ -46,6 +53,13 @@ const FEATURES = [
     color: Colors.warning,
   },
   {
+    path: '/standalone/feel',
+    title: 'FEEL THE CONVERSATION',
+    description: 'Speech becomes Braille vibration',
+    icon: FingerprintPattern,
+    color: Colors.warning,
+  },
+  {
     path: '/standalone/phrases',
     title: 'QUICK PHRASES',
     description: 'Show or speak ready-made messages',
@@ -66,7 +80,7 @@ export default function StandaloneIndex() {
 
   useEffect(() => {
     sayPrompt(
-      'Standalone mode. From top to bottom: Blind mode, Read aloud, Live captions, Conversation, Braille, Quick phrases, and Loud sound alert.'
+      'Standalone mode. From top to bottom: Blind mode, Read aloud, Find my object, Live captions, Conversation, Braille, Feel the conversation, Quick phrases, and Loud sound alert.'
     );
     return () => stopSpeaking();
   }, []);

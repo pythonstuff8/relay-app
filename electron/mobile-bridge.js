@@ -9,7 +9,10 @@ const QRCode = require('qrcode');
 // Phones pair by scanning a QR code that carries host, port, and a pairing token.
 //
 // Desktop -> phone: WELCOME, PONG, ALERT, CAPTION, AUDIO_ACK, AUDIO_REJECTED
-// Phone -> desktop: PING, AUDIO_START, AUDIO_STOP, binary PCM16 audio frames
+// Phone -> desktop: PING, SET_LANGUAGE, AUDIO_START, AUDIO_STOP, binary PCM16 audio frames
+//
+// SET_LANGUAGE {language} asks for captions translated into that language
+// (Classroom Broadcast); null means captions in the spoken language.
 
 const PROTOCOL_VERSION = 1;
 const PORT_CANDIDATES = [8080, 8081, 8082, 8083, 8084, 8085];
@@ -22,6 +25,7 @@ const SUPPORTED_SAMPLE_RATES = new Set([8000, 16000, 24000, 44100, 48000]);
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const TOKEN_LENGTH = 10;
 const SKIPPED_INTERFACES = /^(lo|utun|bridge|vmnet|vboxnet|docker|veth|br-|virbr|awdl|llw|ap\d|anpi|gif|stf|tun|tap|vEthernet|Loopback)/i;
+const CAPTION_LANGUAGE_PATTERN = /^[A-Za-z][A-Za-z ()-]{1,39}$/;
 const PREFERRED_INTERFACES = /^(en0|en1|eth0|eth1|wlan0|wlp|enp|eno|Wi-?Fi|Ethernet|WLAN)/i;
 
 function generateToken() {
@@ -194,6 +198,7 @@ class MobileBridge extends EventEmitter {
     handleConnection(ws, _request, meta) {
         ws.isAlive = true;
         ws.deviceName = meta?.name || 'Phone';
+        ws.captionLanguage = null;
         this.clients.add(ws);
         console.log(`[MobileBridge] ${ws.deviceName} connected`);
 
@@ -236,6 +241,12 @@ class MobileBridge extends EventEmitter {
             case 'PING':
                 this.send(ws, { type: 'PONG' });
                 break;
+            case 'SET_LANGUAGE': {
+                const language = typeof message.language === 'string' ? message.language.trim() : '';
+                ws.captionLanguage = CAPTION_LANGUAGE_PATTERN.test(language) && language !== 'English' ? language : null;
+                this.emitStatus();
+                break;
+            }
             case 'AUDIO_START':
                 await this.beginRemoteMic(ws, message);
                 break;
@@ -308,13 +319,24 @@ class MobileBridge extends EventEmitter {
         }
     }
 
-    broadcast(message) {
+    // Optional filter(ws) limits the message to some phones.
+    broadcast(message, filter = null) {
         if (!this.clients.size) return;
         const payload = JSON.stringify(message);
         for (const ws of this.clients) {
             if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > MAX_BUFFERED_BYTES) continue;
+            if (filter && !filter(ws)) continue;
             try { ws.send(payload); } catch { /* dropped for this client */ }
         }
+    }
+
+    // Languages phones have asked captions to be translated into.
+    get captionLanguages() {
+        const languages = new Set();
+        for (const ws of this.clients) {
+            if (ws.captionLanguage) languages.add(ws.captionLanguage);
+        }
+        return [...languages];
     }
 
     getStatus() {
@@ -323,7 +345,8 @@ class MobileBridge extends EventEmitter {
             port: this.port,
             error: this.error,
             connectedCount: this.clients.size,
-            devices: [...this.clients].map((ws) => ws.deviceName),
+            devices: [...this.clients].map((ws) => (ws.captionLanguage ? `${ws.deviceName} (${ws.captionLanguage})` : ws.deviceName)),
+            captionLanguages: this.captionLanguages,
             remoteMicActive: Boolean(this.remoteMic),
             remoteMicDevice: this.remoteMic?.name || null
         };

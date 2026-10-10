@@ -17,7 +17,7 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Relay uses the camera to describe your surroundings, read text aloud, and scan the pairing code from the Relay desktop app. Photos are sent to OpenAI only when you ask for help.",
+        "NSCameraUsageDescription": "Relay uses the camera to describe your surroundings, read text aloud, find lost objects, scan the pairing code from the Relay desktop app, and flash the light for Night Guard alarms. Photos are sent to OpenAI only when you ask for help.",
         "NSMicrophoneUsageDescription": "Relay uses the microphone for live captions, voice questions, Remote Mic, and loud sound alerts. Speech is sent to Deepgram for transcription only while captions or the talk button are on.",
         "NSLocalNetworkUsageDescription": "Relay connects to the Relay desktop app on your Wi-Fi to receive sound alerts and captions and to send Remote Mic audio.",
         "NSAppTransportSecurity": {
@@ -97,7 +97,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Relay uses the camera to describe your surroundings, read text aloud, and scan the pairing code from the Relay desktop app. Photos are sent to OpenAI only when you ask for help.",
+          "cameraPermission": "Relay uses the camera to describe your surroundings, read text aloud, find lost objects, scan the pairing code from the Relay desktop app, and flash the light for Night Guard alarms. Photos are sent to OpenAI only when you ask for help.",
           "barcodeScannerEnabled": true
         }
       ],

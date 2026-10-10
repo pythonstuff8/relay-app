@@ -3,7 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { BellRing, Captions, Mic, MonitorSmartphone, QrCode, Wifi, WifiOff } from 'lucide-react-native';
+import { BellRing, Captions, Mic, MonitorSmartphone, MoonStar, QrCode, Wifi, WifiOff } from 'lucide-react-native';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { MenuStrip } from '../../components/MenuStrip';
 import { Colors, Typography } from '../../constants/theme';
@@ -19,7 +19,7 @@ export default function ConnectToComputer() {
 
   useEffect(() => {
     if (connected) {
-      sayPrompt(`Connected to ${name}. Options: Sound alerts, Caption mirror, and Remote mic.`);
+      sayPrompt(`Connected to ${name}. Options: Sound alerts, Night guard, Caption mirror, and Remote mic.`);
     } else if (!pairing) {
       sayPrompt('Connect to computer. Open Relay on your computer, go to Settings, then Phone, and scan the code with the button below.');
     }
@@ -27,7 +27,7 @@ export default function ConnectToComputer() {
     // Announce once per connection state change.
   }, [connected, pairing, name]);
 
-  const open = (path: '/middleware/pair' | '/middleware/haptics' | '/middleware/captions' | '/middleware/remote-mic') => {
+  const open = (path: '/middleware/pair' | '/middleware/haptics' | '/middleware/night-guard' | '/middleware/captions' | '/middleware/remote-mic') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     stopSpeaking();
     router.push(path);
@@ -69,11 +69,11 @@ export default function ConnectToComputer() {
             />
             <MenuStrip
               title="CAPTION MIRROR"
-              description="Read your computer's live captions here"
+              description="Live captions from your computer, in your language"
               icon={Captions}
               color={Colors.modeDeaf}
               onPress={() => open('/middleware/captions')}
-              accessibilityLabel="Caption mirror. Read the computer's live captions on your phone."
+              accessibilityLabel="Caption mirror. Read the computer's live captions on your phone, translated into your language if you want."
             />
             <MenuStrip
               title="REMOTE MIC"
@@ -85,6 +85,15 @@ export default function ConnectToComputer() {
             />
           </>
         ) : null}
+
+        <MenuStrip
+          title="NIGHT GUARD"
+          description="Flash and vibrate if a smoke alarm goes off"
+          icon={MoonStar}
+          color={Colors.modeMiddleware}
+          onPress={() => open('/middleware/night-guard')}
+          accessibilityLabel="Night guard. Your phone flashes and vibrates if your computer hears a smoke alarm."
+        />
 
         <MenuStrip
           title={pairing ? 'PAIR AGAIN' : 'SCAN PAIRING CODE'}

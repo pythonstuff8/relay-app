@@ -3085,6 +3085,35 @@ function isDeepgramWanted() {
     return rendererCaptionsActive || remoteMicActive;
 }
 
+// Classroom Broadcast: one request per final caption translates it into every
+// language the connected phones asked for, so the proxy rate limit is not
+// multiplied by the number of students.
+async function translateCaptionForMobiles(text, languages) {
+    const completion = await getOpenAIClient().chat.completions.create({
+        model: CHAT_TEXT_MODEL,
+        temperature: 0,
+        max_tokens: 200 + 120 * languages.length,
+        messages: [
+            {
+                role: 'system',
+                content: 'Translate live classroom captions. Reply with a JSON object only, mapping each requested language name to the translation. ' +
+                    'Keep it natural and short; captions may contain recognition errors.'
+            },
+            { role: 'user', content: JSON.stringify({ languages, text }) }
+        ]
+    });
+    const raw = String(completion.choices?.[0]?.message?.content || '');
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    const translations = {};
+    for (const language of languages) {
+        if (typeof parsed?.[language] === 'string' && parsed[language].trim()) translations[language] = parsed[language].trim();
+    }
+    return translations;
+}
+
+let captionTranslationChain = Promise.resolve();
+
 function broadcastCaptionToMobiles(result) {
     if (!mobileBridge || !mobileBridge.connectedCount) return;
     if (!result.isFinal) {
@@ -3092,13 +3121,30 @@ function broadcastCaptionToMobiles(result) {
         if (now - lastInterimBroadcastAt < CAPTION_INTERIM_BROADCAST_MS) return;
         lastInterimBroadcastAt = now;
     }
-    const speaker = result.words.find((word) => Number.isInteger(word.speaker))?.speaker;
-    mobileBridge.broadcast({
-        type: 'CAPTION',
-        text: result.transcript,
-        isFinal: result.isFinal,
-        speaker: Number.isInteger(speaker) ? speaker : null
-    });
+    const speakerValue = result.words.find((word) => Number.isInteger(word.speaker))?.speaker;
+    const speaker = Number.isInteger(speakerValue) ? speakerValue : null;
+    const message = { type: 'CAPTION', text: result.transcript, isFinal: result.isFinal, speaker };
+    const languages = mobileBridge.captionLanguages;
+
+    // Phones that want the spoken language get every caption right away.
+    mobileBridge.broadcast(message, (ws) => !ws.captionLanguage);
+    // Phones that want a translation get final captions only, in order.
+    if (!result.isFinal || !languages.length) return;
+    const text = result.transcript;
+    captionTranslationChain = captionTranslationChain
+        .then(() => translateCaptionForMobiles(text, languages))
+        .catch((error) => {
+            console.warn('[Classroom Broadcast] translation failed:', error.message);
+            return {};
+        })
+        .then((translations) => {
+            for (const language of languages) {
+                mobileBridge?.broadcast(
+                    { ...message, text: translations[language] || text, original: text, language },
+                    (ws) => ws.captionLanguage === language
+                );
+            }
+        });
 }
 
 function startDeepgramKeepAlive() {
